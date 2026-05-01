@@ -186,7 +186,7 @@ export default function IndividualReportPage() {
             <div style={{ maxHeight: 380, overflowY: 'auto', display: 'grid', gap: 6 }}>
               {userStandups.map((s, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--bg-surface)', borderRadius: 6 }}>
-                  <div style={{ display: 'flex', align: 'center', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span>{s.session === 'pagi' ? '☀️' : '🌆'}</span>
                     <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{formatDateShort(s.standup_date)}</span>
                   </div>
