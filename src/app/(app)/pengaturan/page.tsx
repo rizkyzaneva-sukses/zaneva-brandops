@@ -29,6 +29,7 @@ export default function PengaturanPage() {
   const [brandForm, setBrandForm] = useState({ name: '', description: '', status: 'active' });
   const [userForm, setUserForm] = useState({ email: '', full_name: '', role: 'creative', brand_id: '', password: 'zaneva123' });
   const [kpiForm, setKpiForm] = useState({ name: '', category: 'manual', unit: 'currency', description: '' });
+  const [editKpiId, setEditKpiId] = useState<string | null>(null);
   const [showKpiModal, setShowKpiModal] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -104,17 +105,19 @@ export default function PengaturanPage() {
     showToast(`KPI ${!isEnabled ? 'diaktifkan' : 'dinonaktifkan'}`);
   }
 
-  async function handleCreateKpi() {
+  async function handleSaveKpi() {
     setSaving(true);
+    const isEdit = !!editKpiId;
     const res = await fetch('/api/kpi-monitor/items', {
-      method: 'POST',
+      method: isEdit ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(kpiForm),
+      body: JSON.stringify(isEdit ? { id: editKpiId, ...kpiForm } : kpiForm),
     });
     setSaving(false);
     if (res.ok) {
-      showToast('✅ Master KPI berhasil ditambahkan');
+      showToast(`✅ Master KPI berhasil ${isEdit ? 'diperbarui' : 'ditambahkan'}`);
       setKpiForm({ name: '', category: 'manual', unit: 'currency', description: '' });
+      setEditKpiId(null);
       setShowKpiModal(false);
       // Refresh current brand KPI configs if a brand is selected so it auto-syncs
       if (selectedBrandForKpi) {
@@ -123,8 +126,19 @@ export default function PengaturanPage() {
       }
     } else {
       const d = await res.json();
-      showToast(`❌ ${d.error || 'Gagal membuat KPI'}`);
+      showToast(`❌ ${d.error || 'Gagal menyimpan KPI'}`);
     }
+  }
+
+  function openEditKpiModal(c: KpiConfig) {
+    setEditKpiId(c.kpi_item_id);
+    setKpiForm({
+      name: c.kpi_name,
+      category: c.kpi_item.category,
+      unit: c.kpi_item.unit,
+      description: c.kpi_item.description || '',
+    });
+    setShowKpiModal(true);
   }
 
   return (
@@ -270,7 +284,7 @@ export default function PengaturanPage() {
                 </select>
               </div>
             </div>
-            <button className="btn btn-primary" onClick={() => setShowKpiModal(true)}>+ Tambah Master KPI</button>
+            <button className="btn btn-primary" onClick={() => { setEditKpiId(null); setKpiForm({ name: '', category: 'manual', unit: 'currency', description: '' }); setShowKpiModal(true); }}>+ Tambah Master KPI</button>
           </div>
 
           {selectedBrandForKpi && (
@@ -285,7 +299,7 @@ export default function PengaturanPage() {
                       <td style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'capitalize' }}>{c.kpi_item.unit}</td>
                       <td style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'capitalize' }}>{c.kpi_item.category.replace('_', ' ')}</td>
                       <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{c.kpi_item.description || '—'}</td>
-                      <td>
+                      <td style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                         <button
                           onClick={() => handleToggleKpi(c.kpi_item_id, c.is_enabled)}
                           style={{
@@ -296,6 +310,7 @@ export default function PengaturanPage() {
                         >
                           <div style={{ position: 'absolute', top: 3, left: c.is_enabled ? 23 : 3, width: 18, height: 18, borderRadius: '50%', background: 'white', transition: 'left 0.2s' }} />
                         </button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => openEditKpiModal(c)} style={{ padding: '4px 8px', fontSize: 12 }}>Edit</button>
                       </td>
                     </tr>
                   ))}
@@ -305,9 +320,9 @@ export default function PengaturanPage() {
           )}
 
           {showKpiModal && (
-            <Modal title="Tambah Master KPI Baru" onClose={() => setShowKpiModal(false)}>
+            <Modal title={editKpiId ? "Edit Master KPI" : "Tambah Master KPI Baru"} onClose={() => setShowKpiModal(false)}>
               <div style={{ display: 'grid', gap: 14 }}>
-                <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>KPI ini akan ditambahkan ke Kamus KPI dan bisa diaktifkan/dinonaktifkan untuk setiap brand.</p>
+                <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>KPI ini ada di Kamus KPI dan bisa diaktifkan/dinonaktifkan untuk setiap brand. {editKpiId && 'Perubahan di sini akan berdampak ke semua brand yang menggunakan KPI ini.'}</p>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Nama KPI *</label>
                   <input className="input" value={kpiForm.name} onChange={e => setKpiForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Omzet Offline" />
@@ -336,7 +351,7 @@ export default function PengaturanPage() {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 8 }}>
                   <button className="btn btn-secondary" onClick={() => setShowKpiModal(false)}>Batal</button>
-                  <button className="btn btn-primary" onClick={handleCreateKpi} disabled={saving || !kpiForm.name}>Simpan ke Kamus KPI</button>
+                  <button className="btn btn-primary" onClick={handleSaveKpi} disabled={saving || !kpiForm.name}>Simpan ke Kamus KPI</button>
                 </div>
               </div>
             </Modal>

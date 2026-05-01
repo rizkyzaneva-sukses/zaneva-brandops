@@ -106,3 +106,30 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json(newKpi);
 }
+
+export async function PUT(req: NextRequest) {
+  const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
+  if (!session.user || !['owner', 'admin'].includes(session.user.role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const { id, name, category, unit, description } = await req.json();
+
+  if (!id || !name || !category || !unit) {
+    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+  }
+
+  // Update master KPI
+  const updatedKpi = await prisma.kpiItem.update({
+    where: { id },
+    data: { name, category, unit, description },
+  });
+
+  // Update denormalized kpi_name in all brand configs
+  await prisma.kpiBrandConfig.updateMany({
+    where: { kpi_item_id: id },
+    data: { kpi_name: name },
+  });
+
+  return NextResponse.json(updatedKpi);
+}
