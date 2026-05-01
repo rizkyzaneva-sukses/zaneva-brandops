@@ -1,0 +1,310 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  owner
+  admin
+  brand_manager
+  creative
+  public_relation
+  admin_marketplace
+  rnd
+}
+
+enum BrandStatus {
+  active
+  inactive
+}
+
+enum StandupSession {
+  pagi
+  sore
+}
+
+enum StandupStatus {
+  draft
+  submitted
+}
+
+enum ReportStatus {
+  draft
+  submitted
+  reviewed
+}
+
+enum ReportCategory {
+  creative
+  public_relation
+  marketplace
+  rnd
+  general
+}
+
+enum KpiCategory {
+  manual
+  auto_daily_log
+  auto_sum
+}
+
+enum KpiUnit {
+  currency
+  number
+  percent
+}
+
+enum KpiAggregation {
+  sum
+  avg
+  count
+}
+
+enum KpiPlatform {
+  shopee
+  tiktok
+  tokopedia
+}
+
+model User {
+  id         String   @id @default(cuid())
+  email      String   @unique
+  password   String
+  full_name  String
+  role       UserRole @default(creative)
+  brand_id   String?
+  brand_name String?
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  brand    Brand?   @relation(fields: [brand_id], references: [id])
+  standups Standup[]
+  daily_reports DailyReport[]
+
+  @@index([email])
+  @@index([brand_id])
+}
+
+model Brand {
+  id          String      @id @default(cuid())
+  name        String
+  description String?
+  logo_url    String?
+  status      BrandStatus @default(active)
+  created_at  DateTime    @default(now())
+  updated_at  DateTime    @updatedAt
+
+  users         User[]
+  standups      Standup[]
+  daily_reports DailyReport[]
+  weekly_reports WeeklyReport[]
+  monthly_reports MonthlyReport[]
+  kpi_configs   KpiBrandConfig[]
+  kpi_targets   KpiWeeklyTarget[]
+  kpi_snapshots KpiDailySnapshot[]
+  standup_configs StandupConfig[]
+}
+
+model Standup {
+  id          String         @id @default(cuid())
+  brand_id    String
+  brand_name  String
+  user_id     String
+  user_name   String
+  user_role   String
+  session     StandupSession
+  standup_date DateTime
+  answers     Json           @default("{}")
+  daily_log   Json           @default("{}")
+  status      StandupStatus  @default(draft)
+  created_at  DateTime       @default(now())
+  updated_at  DateTime       @updatedAt
+
+  brand Brand @relation(fields: [brand_id], references: [id])
+  user  User  @relation(fields: [user_id], references: [id])
+
+  @@unique([brand_id, user_id, session, standup_date])
+  @@index([brand_id, standup_date])
+  @@index([brand_id, session, standup_date])
+  @@index([user_id, standup_date])
+}
+
+model StandupConfig {
+  id       String         @id @default(cuid())
+  role     UserRole
+  session  StandupSession
+  sections Json           @default("[]")
+  brand_id String?
+  created_at DateTime     @default(now())
+  updated_at DateTime     @updatedAt
+
+  brand Brand? @relation(fields: [brand_id], references: [id])
+
+  @@index([role, session, brand_id])
+}
+
+model DailyReport {
+  id                String         @id @default(cuid())
+  brand_id          String
+  brand_name        String
+  user_id           String
+  report_date       DateTime
+  title             String
+  content           String         @db.Text
+  category          ReportCategory @default(general)
+  status            ReportStatus   @default(draft)
+  submitted_by_name String?
+  submitted_by_role String?
+  created_at        DateTime       @default(now())
+  updated_at        DateTime       @updatedAt
+
+  brand Brand @relation(fields: [brand_id], references: [id])
+  user  User  @relation(fields: [user_id], references: [id])
+
+  @@index([brand_id, report_date])
+}
+
+model WeeklyReport {
+  id               String        @id @default(cuid())
+  brand_id         String
+  brand_name       String
+  week_label       String
+  week_start       DateTime
+  week_end         DateTime
+  submitted_by     String?
+  submitted_by_role String?
+  kpis             Json          @default("[]")
+  highlights       String?       @db.Text
+  lowlights        String?       @db.Text
+  root_cause       String?       @db.Text
+  action_plan      String?       @db.Text
+  eskalasi         String?       @db.Text
+  status           ReportStatus  @default(draft)
+  created_at       DateTime      @default(now())
+  updated_at       DateTime      @updatedAt
+
+  brand Brand @relation(fields: [brand_id], references: [id])
+
+  @@unique([brand_id, week_label])
+  @@index([brand_id, week_start])
+}
+
+model MonthlyReport {
+  id                  String       @id @default(cuid())
+  brand_id            String
+  brand_name          String
+  month_label         String
+  month_year          String
+  submitted_by        String?
+  submitted_by_role   String?
+  scorecard           Json         @default("[]")
+  keberhasilan        String?      @db.Text
+  kegagalan           String?      @db.Text
+  insight_kompetitor  String?      @db.Text
+  rencana_strategis   String?      @db.Text
+  status              ReportStatus @default(draft)
+  created_at          DateTime     @default(now())
+  updated_at          DateTime     @updatedAt
+
+  brand Brand @relation(fields: [brand_id], references: [id])
+
+  @@unique([brand_id, month_year])
+  @@index([brand_id, month_year])
+}
+
+model KpiItem {
+  id                String         @id @default(cuid())
+  name              String
+  category          KpiCategory
+  auto_source_role  String?
+  auto_source       String?
+  auto_aggregation  KpiAggregation @default(sum)
+  unit              KpiUnit        @default(number)
+  platform          String?
+  order_num         Int            @default(0)
+  is_active         Boolean        @default(true)
+  description       String?
+  created_at        DateTime       @default(now())
+  updated_at        DateTime       @updatedAt
+
+  brand_configs KpiBrandConfig[]
+  weekly_targets KpiWeeklyTarget[]
+  daily_snapshots KpiDailySnapshot[]
+
+  @@index([is_active])
+}
+
+model KpiBrandConfig {
+  id          String  @id @default(cuid())
+  brand_id    String
+  brand_name  String
+  kpi_item_id String
+  kpi_name    String
+  is_enabled  Boolean @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  brand    Brand   @relation(fields: [brand_id], references: [id])
+  kpi_item KpiItem @relation(fields: [kpi_item_id], references: [id])
+
+  @@unique([brand_id, kpi_item_id])
+  @@index([brand_id, is_enabled])
+}
+
+model KpiWeeklyTarget {
+  id             String   @id @default(cuid())
+  brand_id       String
+  brand_name     String
+  kpi_item_id    String
+  kpi_name       String
+  week_label     String
+  week_start_date DateTime
+  week_end_date  DateTime
+  target_value   Float
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  brand    Brand   @relation(fields: [brand_id], references: [id])
+  kpi_item KpiItem @relation(fields: [kpi_item_id], references: [id])
+
+  @@unique([brand_id, week_label, kpi_item_id])
+  @@index([brand_id, week_start_date])
+}
+
+model KpiDailySnapshot {
+  id               String   @id @default(cuid())
+  brand_id         String
+  snapshot_date    DateTime
+  week_label       String
+  kpi_item_id      String
+  kpi_name         String
+  daily_value      Float    @default(0)
+  cumulative_value Float    @default(0)
+  target_value     Float    @default(0)
+  pct_of_target    Float    @default(0)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  brand    Brand   @relation(fields: [brand_id], references: [id])
+  kpi_item KpiItem @relation(fields: [kpi_item_id], references: [id])
+
+  @@unique([brand_id, snapshot_date, kpi_item_id])
+  @@index([brand_id, week_label])
+}
+
+model CustomRole {
+  id                   String   @id @default(cuid())
+  key                  String   @unique
+  label                String
+  description          String?
+  color                String   @default("blue")
+  is_active            Boolean  @default(true)
+  default_standup_role String?
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+}
