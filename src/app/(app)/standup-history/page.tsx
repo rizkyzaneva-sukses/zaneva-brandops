@@ -105,7 +105,7 @@ export default function StandupHistoryPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <span style={{ fontSize: 18 }}>{s.session === 'pagi' ? '☀️' : '🌆'}</span>
                   <div>
-                    <div style={{ display: 'flex', align: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 13, fontWeight: 600 }}>{s.user_name}</span>
                       <span className={`badge ${ROLE_CLASS[s.user_role] || 'role-owner'}`} style={{ fontSize: 9 }}>{ROLE_LABELS[s.user_role]}</span>
                       {isManager && <span style={{ fontSize: 11, color: 'var(--gold)' }}>{s.brand_name}</span>}
