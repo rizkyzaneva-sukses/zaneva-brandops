@@ -64,7 +64,7 @@ const GUIDES: Record<string, { title: string; color: string; sections: { heading
     sections: [
       { heading: 'Dashboard Owner', content: 'Anda bisa melihat:\n• Status board sprint harian semua brand\n• Progress KPI semua brand\n• Aktivitas chart 7 hari terakhir\n• Laporan harian terbaru' },
       { heading: 'Monitor KPI', content: 'Di menu Monitor KPI, pilih brand untuk melihat progress KPI minggu ini. Data diambil real-time dari daily log atau dari Weekly Report yang sudah disubmit (prioritas lebih tinggi).' },
-      { heading: 'Pengaturan', content: 'Anda bisa:\n• Tambah/edit brand\n• Manage user dan role\n• Set KPI yang aktif per brand\n• Set target KPI mingguan' },
+      { heading: 'Pengaturan', content: 'Anda bisa:\n• Tambah/edit brand\n• Manage user dan role\n• Tambah Master KPI baru (jika ada metric unik)\n• Set KPI yang aktif per brand\n• Set target KPI mingguan' },
     ],
   },
 };
