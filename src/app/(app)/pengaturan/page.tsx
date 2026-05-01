@@ -5,7 +5,7 @@ import { ROLE_LABELS, ROLE_CLASS } from '@/lib/utils';
 
 interface Brand { id: string; name: string; description: string; status: string; }
 interface User { id: string; email: string; full_name: string; role: string; brand_id: string | null; brand_name: string | null; is_active: boolean; }
-interface KpiConfig { kpi_item_id: string; kpi_name: string; is_enabled: boolean; kpi_item: { unit: string; category: string; description: string | null }; }
+interface KpiConfig { kpi_item_id: string; kpi_name: string; is_enabled: boolean; kpi_item: { unit: string; category: string; description: string | null; auto_source_role?: string | null }; }
 
 const TABS = ['Brand', 'Tim', 'KPI Config'];
 const ROLES = [
@@ -28,7 +28,7 @@ export default function PengaturanPage() {
   const [showUserModal, setShowUserModal] = useState(false);
   const [brandForm, setBrandForm] = useState({ name: '', description: '', status: 'active' });
   const [userForm, setUserForm] = useState({ email: '', full_name: '', role: 'creative', brand_id: '', password: 'zaneva123' });
-  const [kpiForm, setKpiForm] = useState({ name: '', category: 'manual', unit: 'currency', description: '' });
+  const [kpiForm, setKpiForm] = useState({ name: '', category: 'manual', unit: 'currency', description: '', auto_source_role: '' });
   const [editKpiId, setEditKpiId] = useState<string | null>(null);
   const [showKpiModal, setShowKpiModal] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -116,7 +116,7 @@ export default function PengaturanPage() {
     setSaving(false);
     if (res.ok) {
       showToast(`✅ Master KPI berhasil ${isEdit ? 'diperbarui' : 'ditambahkan'}`);
-      setKpiForm({ name: '', category: 'manual', unit: 'currency', description: '' });
+      setKpiForm({ name: '', category: 'manual', unit: 'currency', description: '', auto_source_role: '' });
       setEditKpiId(null);
       setShowKpiModal(false);
       // Refresh current brand KPI configs if a brand is selected so it auto-syncs
@@ -137,6 +137,7 @@ export default function PengaturanPage() {
       category: c.kpi_item.category,
       unit: c.kpi_item.unit,
       description: c.kpi_item.description || '',
+      auto_source_role: c.kpi_item.auto_source_role || '',
     });
     setShowKpiModal(true);
   }
@@ -284,7 +285,7 @@ export default function PengaturanPage() {
                 </select>
               </div>
             </div>
-            <button className="btn btn-primary" onClick={() => { setEditKpiId(null); setKpiForm({ name: '', category: 'manual', unit: 'currency', description: '' }); setShowKpiModal(true); }}>+ Tambah Master KPI</button>
+            <button className="btn btn-primary" onClick={() => { setEditKpiId(null); setKpiForm({ name: '', category: 'manual', unit: 'currency', description: '', auto_source_role: '' }); setShowKpiModal(true); }}>+ Tambah Master KPI</button>
           </div>
 
           {selectedBrandForKpi && (
@@ -345,6 +346,18 @@ export default function PengaturanPage() {
                     </select>
                   </div>
                 </div>
+
+                {kpiForm.category === 'auto_daily_log' && (
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Ditugaskan ke (Role) *</label>
+                    <select className="input" value={kpiForm.auto_source_role} onChange={e => setKpiForm(p => ({ ...p, auto_source_role: e.target.value }))}>
+                      <option value="">— Pilih Role yang mengisi harian —</option>
+                      {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                    </select>
+                    <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Role ini yang akan melihat kolom inputan KPI ini di form Sprint Sore mereka.</p>
+                  </div>
+                )}
+
                 <div>
                   <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Deskripsi</label>
                   <input className="input" value={kpiForm.description} onChange={e => setKpiForm(p => ({ ...p, description: e.target.value }))} placeholder="Penjelasan singkat tentang KPI ini" />

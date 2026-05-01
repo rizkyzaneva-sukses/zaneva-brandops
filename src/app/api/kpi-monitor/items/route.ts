@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const { name, category, unit, description } = await req.json();
+  const { name, category, unit, description, auto_source_role } = await req.json();
 
   if (!name || !category || !unit) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -92,8 +92,11 @@ export async function POST(req: NextRequest) {
   });
   const order_num = (lastKpi?.order_num || 0) + 1;
 
+  const id = crypto.randomUUID();
+
   const newKpi = await prisma.kpiItem.create({
     data: {
+      id,
       name,
       category,
       unit,
@@ -101,6 +104,8 @@ export async function POST(req: NextRequest) {
       order_num,
       is_active: true,
       auto_aggregation: 'sum',
+      auto_source_role: category === 'auto_daily_log' ? auto_source_role : null,
+      auto_source: category === 'auto_daily_log' ? `custom_${id}` : null,
     },
   });
 
@@ -113,7 +118,7 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const { id, name, category, unit, description } = await req.json();
+  const { id, name, category, unit, description, auto_source_role } = await req.json();
 
   if (!id || !name || !category || !unit) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -122,7 +127,14 @@ export async function PUT(req: NextRequest) {
   // Update master KPI
   const updatedKpi = await prisma.kpiItem.update({
     where: { id },
-    data: { name, category, unit, description },
+    data: { 
+      name, 
+      category, 
+      unit, 
+      description,
+      auto_source_role: category === 'auto_daily_log' ? auto_source_role : null,
+      auto_source: category === 'auto_daily_log' ? `custom_${id}` : null,
+    },
   });
 
   // Update denormalized kpi_name in all brand configs

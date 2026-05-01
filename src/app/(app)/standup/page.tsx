@@ -46,6 +46,7 @@ export default function StandupPage() {
   const [kpiFeedback, setKpiFeedback] = useState<KpiFeedback[] | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
   const [recapOpen, setRecapOpen] = useState(false);
+  const [dynamicLogFields, setDynamicLogFields] = useState<any[]>([]);
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -89,18 +90,47 @@ export default function StandupPage() {
     }
   }, [today, tab]);
 
+  const fetchDynamicKpis = useCallback(async (brandId: string, role: string) => {
+    const res = await fetch(`/api/kpi-monitor/items?brand_id=${brandId}&enabled_only=true`);
+    if (res.ok) {
+      const data = await res.json();
+      const assigned = data.filter((c: any) => c.kpi_item.category === 'auto_daily_log' && c.kpi_item.auto_source_role === role);
+      setDynamicLogFields(assigned.map((c: any) => ({
+         key: c.kpi_item.auto_source || `custom_${c.kpi_item.id}`,
+         label: c.kpi_name,
+         unit: c.kpi_item.unit,
+      })));
+    }
+  }, []);
+
   useEffect(() => {
     fetchUser();
   }, [fetchUser]);
 
   useEffect(() => {
-    if (user) fetchStandups(user.id);
-  }, [user, tab, fetchStandups]);
+    if (user) {
+      fetchStandups(user.id);
+      if (user.brand_id) fetchDynamicKpis(user.brand_id, user.role);
+    }
+  }, [user, tab, fetchStandups, fetchDynamicKpis]);
 
   const currentStandup = todayStandups.find(s => s.session === tab);
   const isSubmitted = currentStandup?.status === 'submitted';
   const sections = user ? getStandupQuestions(user.role, tab) : [];
-  const logConfig = user ? getDailyLogConfig(user.role) : null;
+  let logConfig = user ? getDailyLogConfig(user.role) : null;
+  
+  if (dynamicLogFields.length > 0) {
+    if (!logConfig) {
+      logConfig = { title: 'Daily KPI Log', columns: ['Metrik', 'Aktual', 'Catatan'], rows: [] };
+    }
+    // Append dynamic fields that are not already in logConfig
+    const existingKeys = new Set(logConfig.rows.map(r => r.key));
+    const newFields = dynamicLogFields.filter(f => !existingKeys.has(f.key));
+    logConfig = {
+      ...logConfig,
+      rows: [...logConfig.rows, ...newFields]
+    };
+  }
 
   async function handleSave(status: 'draft' | 'submitted') {
     if (!user) return;
