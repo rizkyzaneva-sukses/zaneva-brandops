@@ -14,11 +14,39 @@ export async function GET(req: NextRequest) {
 
   if (brand_id) {
     // Return KPI brand configs for this brand
-    const configs = await prisma.kpiBrandConfig.findMany({
+    let configs = await prisma.kpiBrandConfig.findMany({
       where: { brand_id, ...(enabled_only ? { is_enabled: true } : {}) },
       include: { kpi_item: true },
-      orderBy: { kpi_item: { order_num: 'asc' } },
     });
+
+    if (!enabled_only) {
+      const allMasterKpis = await prisma.kpiItem.findMany({ where: { is_active: true } });
+      const existingKpiIds = new Set(configs.map(c => c.kpi_item_id));
+      const missingKpis = allMasterKpis.filter(k => !existingKpiIds.has(k.id));
+
+      if (missingKpis.length > 0) {
+        const brand = await prisma.brand.findUnique({ where: { id: brand_id } });
+        if (brand) {
+          await prisma.kpiBrandConfig.createMany({
+            data: missingKpis.map(k => ({
+              brand_id: brand.id,
+              brand_name: brand.name,
+              kpi_item_id: k.id,
+              kpi_name: k.name,
+              is_enabled: false,
+            })),
+          });
+          
+          configs = await prisma.kpiBrandConfig.findMany({
+            where: { brand_id },
+            include: { kpi_item: true },
+          });
+        }
+      }
+    }
+
+    configs.sort((a, b) => a.kpi_item.order_num - b.kpi_item.order_num);
+
     return NextResponse.json(configs);
   }
 
@@ -44,4 +72,37 @@ export async function PATCH(req: NextRequest) {
   });
 
   return NextResponse.json(config);
+}
+
+export async function POST(req: NextRequest) {
+  const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
+  if (!session.user || !['owner', 'admin'].includes(session.user.role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const { name, category, unit, description } = await req.json();
+
+  if (!name || !category || !unit) {
+    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+  }
+
+  // Get current max order_num
+  const lastKpi = await prisma.kpiItem.findFirst({
+    orderBy: { order_num: 'desc' },
+  });
+  const order_num = (lastKpi?.order_num || 0) + 1;
+
+  const newKpi = await prisma.kpiItem.create({
+    data: {
+      name,
+      category,
+      unit,
+      description,
+      order_num,
+      is_active: true,
+      auto_aggregation: 'sum',
+    },
+  });
+
+  return NextResponse.json(newKpi);
 }
