@@ -7,7 +7,6 @@ interface Brand { id: string; name: string; description: string; status: string;
 interface User { id: string; email: string; full_name: string; role: string; brand_id: string | null; brand_name: string | null; is_active: boolean; }
 interface KpiConfig { kpi_item_id: string; kpi_name: string; is_enabled: boolean; kpi_item: { unit: string; category: string; description: string | null; auto_source_role?: string | null }; }
 
-const TABS = ['Brand', 'Tim', 'KPI Config'];
 const ROLES = [
   { value: 'brand_manager', label: 'Brand Manager' },
   { value: 'creative', label: 'Creative' },
@@ -19,6 +18,7 @@ const ROLES = [
 
 export default function PengaturanPage() {
   const [activeTab, setActiveTab] = useState('Brand');
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [kpiConfigs, setKpiConfigs] = useState<KpiConfig[]>([]);
@@ -36,6 +36,7 @@ export default function PengaturanPage() {
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   useEffect(() => {
+    fetch('/api/auth/me').then(r => r.json()).then(d => setCurrentUser(d.user));
     fetch('/api/brands').then(r => r.json()).then(setBrands);
     fetch('/api/users').then(r => r.json()).then(setUsers);
   }, []);
@@ -142,6 +143,37 @@ export default function PengaturanPage() {
     setShowKpiModal(true);
   }
 
+  async function handleGenerateDummy() {
+    if (!confirm('Apakah Anda yakin ingin membuat data dummy? Data lama TIDAK akan terhapus, tapi ini akan memenuhi database Anda.')) return;
+    setSaving(true);
+    const res = await fetch('/api/admin/dummy-data', { method: 'POST' });
+    setSaving(false);
+    if (res.ok) {
+      showToast('✅ Dummy data berhasil di-generate!');
+    } else {
+      showToast('❌ Gagal generate dummy data');
+    }
+  }
+
+  async function handleResetData() {
+    if (!confirm('AWAS! Ini akan MENGHAPUS SEMUA DATA TRANSAKSI (Standup, Report Mingguan, dsb). Master data (Brand, User, KPI) akan aman. Yakin?')) return;
+    const confirm2 = prompt('Ketik "HAPUS" untuk melanjutkan');
+    if (confirm2 !== 'HAPUS') {
+      showToast('Dibatalkan');
+      return;
+    }
+    setSaving(true);
+    const res = await fetch('/api/admin/reset-data', { method: 'POST' });
+    setSaving(false);
+    if (res.ok) {
+      showToast('✅ Semua data transaksi berhasil di-reset!');
+    } else {
+      showToast('❌ Gagal mereset data');
+    }
+  }
+
+  const tabs = currentUser?.role === 'owner' ? ['Brand', 'Tim', 'KPI Config', 'Sistem (Owner)'] : ['Brand', 'Tim', 'KPI Config'];
+
   return (
     <div>
       <div style={{ marginBottom: 24 }}>
@@ -151,7 +183,7 @@ export default function PengaturanPage() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 0, marginBottom: 24, background: 'var(--bg-surface)', padding: 4, borderRadius: 10, width: 'fit-content', border: '1px solid var(--border)' }}>
-        {TABS.map(tab => (
+        {tabs.map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
             style={{ padding: '8px 20px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, background: activeTab === tab ? 'var(--gold)' : 'transparent', color: activeTab === tab ? '#0A0E1A' : 'var(--text-secondary)', transition: 'all 0.15s' }}>
             {tab}
@@ -369,6 +401,34 @@ export default function PengaturanPage() {
               </div>
             </Modal>
           )}
+        </div>
+      )}
+
+      {/* SISTEM TAB */}
+      {activeTab === 'Sistem (Owner)' && currentUser?.role === 'owner' && (
+        <div style={{ display: 'grid', gap: 24 }}>
+          <div className="card" style={{ border: '1px solid rgba(245,158,11,0.3)', background: 'rgba(245,158,11,0.05)' }}>
+            <h3 style={{ fontSize: 16, fontWeight: 600, color: '#F59E0B', marginBottom: 8 }}>🛠 Generate Dummy Data</h3>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
+              Isi database dengan data bohongan (Standup Pagi/Sore, Weekly Report, Target KPI, dan Snapshot KPI harian). 
+              Gunakan ini untuk melihat bagaimana aplikasi bekerja dengan data penuh. Data asli tidak akan dihapus.
+            </p>
+            <button className="btn" style={{ background: '#F59E0B', color: 'white', border: 'none' }} onClick={handleGenerateDummy} disabled={saving}>
+              {saving ? 'Loading...' : 'Generate Dummy Data'}
+            </button>
+          </div>
+
+          <div className="card" style={{ border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.05)' }}>
+            <h3 style={{ fontSize: 16, fontWeight: 600, color: '#EF4444', marginBottom: 8 }}>⚠️ Hapus Semua Data Transaksi</h3>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
+              Menghapus <strong>SEMUA</strong> data operasional seperti Standup, Laporan Harian/Mingguan/Bulanan, serta data rekapan KPI. 
+              Master data (Brand, User, Kamus KPI) <strong>tidak akan dihapus</strong>.
+              Gunakan ini sebelum benar-benar menggunakan aplikasi secara nyata (setelah selesai coba-coba dummy).
+            </p>
+            <button className="btn" style={{ background: '#EF4444', color: 'white', border: 'none' }} onClick={handleResetData} disabled={saving}>
+              {saving ? 'Loading...' : 'Reset Data Transaksi'}
+            </button>
+          </div>
         </div>
       )}
 
