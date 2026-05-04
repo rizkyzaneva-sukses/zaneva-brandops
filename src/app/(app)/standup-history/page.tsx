@@ -19,14 +19,27 @@ export default function StandupHistoryPage() {
   const [filterStatus, setFilterStatus] = useState('submitted');
   const [myOnly, setMyOnly] = useState(false);
 
+  // Edit modal state
+  const [editingStandup, setEditingStandup] = useState<StandupRecord | null>(null);
+  const [editAnswers, setEditAnswers] = useState<Record<string, string>>({});
+  const [editDailyLog, setEditDailyLog] = useState<Record<string, string>>({});
+  const [editSaving, setEditSaving] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+
   const isManager = user && ['owner', 'admin', 'brand_manager'].includes(user.role);
+  const canEditOthers = user && ['owner', 'brand_manager'].includes(user.role);
+
+  const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3500);
+  };
 
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.json()).then(d => setUser(d.user));
     fetch('/api/brands?status=active').then(r => r.json()).then(setBrands);
   }, []);
 
-  useEffect(() => {
+  const fetchStandups = () => {
     if (!user) return;
     setLoading(true);
     let url = '/api/standups?';
@@ -39,12 +52,84 @@ export default function StandupHistoryPage() {
     if (myOnly && user.id) params.set('user_id', user.id);
     url += params.toString();
     fetch(url).then(r => r.json()).then(d => { setStandups(d); setLoading(false); }).catch(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchStandups();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, filterBrand, filterSession, filterStatus, filterDateFrom, filterDateTo, myOnly]);
 
   function toggleExpand(id: string) { setExpanded(prev => prev === id ? null : id); }
 
+  function openEditModal(e: React.MouseEvent, standup: StandupRecord) {
+    e.stopPropagation();
+    setEditingStandup(standup);
+    // Convert answers and daily_log to string records for editing
+    const ans: Record<string, string> = {};
+    for (const [k, v] of Object.entries(standup.answers)) {
+      ans[k] = String(v || '');
+    }
+    setEditAnswers(ans);
+
+    const dl: Record<string, string> = {};
+    for (const [k, v] of Object.entries(standup.daily_log)) {
+      dl[k] = String(v || '');
+    }
+    setEditDailyLog(dl);
+  }
+
+  function closeEditModal() {
+    setEditingStandup(null);
+    setEditAnswers({});
+    setEditDailyLog({});
+  }
+
+  async function handleEditSave() {
+    if (!editingStandup) return;
+    setEditSaving(true);
+
+    try {
+      const res = await fetch('/api/standups', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          standup_id: editingStandup.id,
+          answers: editAnswers,
+          daily_log: editDailyLog,
+        }),
+      });
+
+      if (res.ok) {
+        showToast('Sprint berhasil diupdate ✅');
+        closeEditModal();
+        fetchStandups();
+      } else {
+        const err = await res.json();
+        showToast(err.error || 'Gagal menyimpan', 'error');
+      }
+    } catch {
+      showToast('Gagal menyimpan', 'error');
+    }
+
+    setEditSaving(false);
+  }
+
   return (
     <div>
+      {/* Toast */}
+      {toast && (
+        <div style={{
+          position: 'fixed', top: 20, right: 20, zIndex: 9999,
+          padding: '12px 20px', borderRadius: 10, fontSize: 13, fontWeight: 600,
+          background: toast.type === 'success' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
+          border: `1px solid ${toast.type === 'success' ? 'rgba(34,197,94,0.4)' : 'rgba(239,68,68,0.4)'}`,
+          color: toast.type === 'success' ? 'var(--green)' : '#ef4444',
+          backdropFilter: 'blur(10px)',
+        }}>
+          {toast.msg}
+        </div>
+      )}
+
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>History Sprint</h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Riwayat seluruh Daily Sprint</p>
@@ -116,6 +201,30 @@ export default function StandupHistoryPage() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  {canEditOthers && (
+                    <button
+                      onClick={(e) => openEditModal(e, s)}
+                      title="Edit Sprint"
+                      style={{
+                        background: 'rgba(234,179,8,0.1)',
+                        border: '1px solid rgba(234,179,8,0.3)',
+                        borderRadius: 6,
+                        padding: '4px 10px',
+                        cursor: 'pointer',
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: 'var(--gold)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        transition: 'all 0.15s',
+                      }}
+                      onMouseEnter={e => { (e.target as HTMLElement).style.background = 'rgba(234,179,8,0.2)'; }}
+                      onMouseLeave={e => { (e.target as HTMLElement).style.background = 'rgba(234,179,8,0.1)'; }}
+                    >
+                      ✏️ Edit
+                    </button>
+                  )}
                   <span className={`badge ${s.status === 'submitted' ? 'status-on-track' : 'status-behind'}`} style={{ fontSize: 9 }}>{s.status}</span>
                   <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>{expanded === s.id ? '▲' : '▼'}</span>
                 </div>
@@ -157,6 +266,117 @@ export default function StandupHistoryPage() {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {editingStandup && (
+        <div
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+            zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 20,
+          }}
+          onClick={closeEditModal}
+        >
+          <div
+            style={{
+              background: 'var(--bg-card)', border: '1px solid var(--border)',
+              borderRadius: 16, width: '100%', maxWidth: 640,
+              maxHeight: '85vh', overflow: 'auto',
+              padding: 24,
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <div>
+                <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Edit Sprint</h2>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{editingStandup.user_name}</span>
+                  <span className={`badge ${ROLE_CLASS[editingStandup.user_role] || 'role-owner'}`} style={{ fontSize: 9 }}>{ROLE_LABELS[editingStandup.user_role]}</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    Sprint {editingStandup.session === 'pagi' ? 'Pagi' : 'Sore'} · {formatDateShort(editingStandup.standup_date)}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={closeEditModal}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  fontSize: 20, color: 'var(--text-muted)', padding: '4px 8px',
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Edit Answers */}
+            {Object.keys(editAnswers).length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <h4 style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 12 }}>Jawaban Sprint</h4>
+                <div style={{ display: 'grid', gap: 12 }}>
+                  {Object.entries(editAnswers).map(([key, val]) => (
+                    <div key={key}>
+                      <label style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4, display: 'block', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                        {key.replace(/_/g, ' ')}
+                      </label>
+                      <textarea
+                        className="input"
+                        value={val}
+                        onChange={e => setEditAnswers(prev => ({ ...prev, [key]: e.target.value }))}
+                        rows={2}
+                        style={{ width: '100%', resize: 'vertical', minHeight: 40 }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Edit Daily Log */}
+            {Object.keys(editDailyLog).length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <h4 style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 12 }}>Daily Log</h4>
+                <div style={{ display: 'grid', gap: 12 }}>
+                  {Object.entries(editDailyLog).map(([key, val]) => (
+                    <div key={key}>
+                      <label style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4, display: 'block', textTransform: 'uppercase', letterSpacing: '0.3px' }}>
+                        {key.replace(/_/g, ' ')}
+                      </label>
+                      <input
+                        className="input"
+                        type="text"
+                        value={val}
+                        onChange={e => setEditDailyLog(prev => ({ ...prev, [key]: e.target.value }))}
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Modal Actions */}
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+              <button
+                className="btn btn-ghost"
+                onClick={closeEditModal}
+                style={{ padding: '8px 20px', fontSize: 13 }}
+              >
+                Batal
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={handleEditSave}
+                disabled={editSaving}
+                style={{ padding: '8px 20px', fontSize: 13, fontWeight: 600 }}
+              >
+                {editSaving ? 'Menyimpan...' : '💾 Simpan Perubahan'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -104,3 +104,42 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json(standup);
 }
+
+export async function PUT(req: NextRequest) {
+  const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
+  if (!session.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  // Only owner and brand_manager can edit other people's sprints
+  if (!['owner', 'brand_manager'].includes(session.user.role)) {
+    return NextResponse.json({ error: 'Hanya Owner dan Brand Manager yang dapat mengedit sprint tim lain' }, { status: 403 });
+  }
+
+  const data = await req.json();
+  const { standup_id, answers, daily_log, status: newStatus } = data;
+
+  if (!standup_id) {
+    return NextResponse.json({ error: 'standup_id is required' }, { status: 400 });
+  }
+
+  // Find the standup
+  const existing = await prisma.standup.findUnique({ where: { id: standup_id } });
+  if (!existing) {
+    return NextResponse.json({ error: 'Sprint tidak ditemukan' }, { status: 404 });
+  }
+
+  // Brand manager can only edit sprints within their own brand
+  if (session.user.role === 'brand_manager' && existing.brand_id !== session.user.brand_id) {
+    return NextResponse.json({ error: 'Brand Manager hanya dapat mengedit sprint dalam brand sendiri' }, { status: 403 });
+  }
+
+  const updated = await prisma.standup.update({
+    where: { id: standup_id },
+    data: {
+      ...(answers !== undefined && { answers }),
+      ...(daily_log !== undefined && { daily_log }),
+      ...(newStatus !== undefined && { status: newStatus }),
+    },
+  });
+
+  return NextResponse.json(updated);
+}
