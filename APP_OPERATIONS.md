@@ -14,6 +14,8 @@ Dokumen ini dipakai untuk operasional harian aplikasi, import data, dan deploy.
 - Hanya akun yang `is_active = true` yang bisa login.
 - Kredensial owner jangan ditulis di repo.
 - Jika perlu ganti password owner, update hash password di tabel `User`.
+- Untuk deploy baru, set `OWNER_EMAIL`, `OWNER_PASSWORD`, dan `OWNER_NAME`.
+- Login route akan otomatis membuat atau memperbarui akun owner dari env tersebut saat proses login pertama.
 
 ## Import Data JSON
 
@@ -76,6 +78,9 @@ DATABASE_URL="postgresql://user:password@host:5432/zaneva_brandops"
 SESSION_SECRET="replace-with-a-long-random-secret"
 SESSION_COOKIE_NAME="zaneva_session"
 NEXTAUTH_URL="http://localhost:3000"
+OWNER_EMAIL="owner@example.com"
+OWNER_PASSWORD="replace-with-owner-password"
+OWNER_NAME="System Owner"
 ```
 
 ## Catatan Operasional

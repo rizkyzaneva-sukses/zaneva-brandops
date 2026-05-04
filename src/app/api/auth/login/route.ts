@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 import { sessionOptions, SessionData } from '@/lib/session';
+import { ensureSystemOwner } from '@/lib/systemOwner';
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,7 +14,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Email dan password wajib diisi' }, { status: 400 });
     }
 
-    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+    await ensureSystemOwner();
+
+    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
 
     if (!user || !user.is_active) {
       return NextResponse.json({ error: 'Email atau password salah' }, { status: 401 });

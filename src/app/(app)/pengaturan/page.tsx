@@ -16,6 +16,7 @@ interface ImportSummary {
 }
 
 const ROLES = [
+  { value: 'owner', label: 'Owner' },
   { value: 'brand_manager', label: 'Brand Manager' },
   { value: 'creative', label: 'Creative' },
   { value: 'public_relation', label: 'Public Relation' },
@@ -87,22 +88,30 @@ export default function PengaturanPage() {
   }
 
   async function handleCreateUser() {
-    setSaving(true);
-    const brand = brands.find(b => b.id === userForm.brand_id);
-    const res = await fetch('/api/users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...userForm, brand_name: brand?.name || null }),
-    });
-    setSaving(false);
-    if (res.ok) {
-      showToast('✅ User berhasil ditambahkan');
-      setUserForm({ email: '', full_name: '', role: 'creative', brand_id: '', password: 'zaneva123' });
-      setShowUserModal(false);
-      fetch('/api/users').then(r => r.json()).then(setUsers);
-    } else {
-      const d = await res.json();
-      showToast(`❌ ${d.error || 'Gagal membuat user'}`);
+    try {
+      setSaving(true);
+      const brand = brands.find(b => b.id === userForm.brand_id);
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...userForm, brand_name: brand?.name || null }),
+      });
+
+      const data = await res.json().catch(() => ({ error: 'Gagal membuat user' }));
+
+      if (res.ok) {
+        showToast('✅ User berhasil ditambahkan');
+        setUserForm({ email: '', full_name: '', role: 'creative', brand_id: '', password: 'zaneva123' });
+        setShowUserModal(false);
+        fetch('/api/users').then(r => r.json()).then(setUsers);
+      } else {
+        showToast(`❌ ${data.error || 'Gagal membuat user'}`);
+      }
+    } catch (error) {
+      console.error('Create user UI error:', error);
+      showToast('❌ Gagal membuat user');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -339,8 +348,10 @@ export default function PengaturanPage() {
                   <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>User bisa ganti password setelah login pertama (fitur reset manual)</p>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-                  <button className="btn btn-secondary" onClick={() => setShowUserModal(false)}>Batal</button>
-                  <button className="btn btn-primary" onClick={handleCreateUser} disabled={saving || !userForm.full_name || !userForm.email}>Tambah User</button>
+                  <button type="button" className="btn btn-secondary" onClick={() => setShowUserModal(false)}>Batal</button>
+                  <button type="button" className="btn btn-primary" onClick={handleCreateUser} disabled={saving || !userForm.full_name.trim() || !userForm.email.trim()}>
+                    {saving ? 'Menyimpan...' : 'Tambah User'}
+                  </button>
                 </div>
               </div>
             </Modal>
