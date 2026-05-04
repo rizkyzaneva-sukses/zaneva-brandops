@@ -22,7 +22,12 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const file = formData.get('file');
 
-    if (!(file instanceof File)) {
+    if (
+      !file ||
+      typeof file !== 'object' ||
+      typeof (file as { name?: unknown }).name !== 'string' ||
+      typeof (file as { arrayBuffer?: unknown }).arrayBuffer !== 'function'
+    ) {
       return NextResponse.json({ error: 'File JSON wajib diunggah' }, { status: 400 });
     }
 
