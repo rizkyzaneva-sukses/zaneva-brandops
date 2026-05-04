@@ -96,9 +96,9 @@ export default function StandupPage() {
       const data = await res.json();
       const assigned = data.filter((c: any) => c.kpi_item.category === 'auto_daily_log' && c.kpi_item.auto_source_role === role);
       setDynamicLogFields(assigned.map((c: any) => ({
-         key: c.kpi_item.auto_source || `custom_${c.kpi_item.id}`,
-         label: c.kpi_name,
-         unit: c.kpi_item.unit,
+        key: c.kpi_item.auto_source || `custom_${c.kpi_item.id}`,
+        label: c.kpi_name,
+        unit: c.kpi_item.unit,
       })));
     }
   }, []);
@@ -116,9 +116,10 @@ export default function StandupPage() {
 
   const currentStandup = todayStandups.find(s => s.session === tab);
   const isSubmitted = currentStandup?.status === 'submitted';
+  const canEdit = user ? ['brand_manager', 'owner'].includes(user.role) : false;
   const sections = user ? getStandupQuestions(user.role, tab) : [];
   let logConfig = user ? getDailyLogConfig(user.role) : null;
-  
+
   if (dynamicLogFields.length > 0) {
     if (!logConfig) {
       logConfig = { title: 'Daily KPI Log', columns: ['Metrik', 'Aktual', 'Catatan'], rows: [] };
@@ -219,7 +220,7 @@ export default function StandupPage() {
       {isSubmitted && !showFeedback && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 10, marginBottom: 20 }}>
           <span style={{ fontSize: 14, color: 'var(--green)', fontWeight: 500 }}>✅ Sprint {tab} sudah disubmit</span>
-          <button className="btn btn-ghost btn-sm" onClick={handleEdit}>Edit</button>
+          {canEdit && <button className="btn btn-ghost btn-sm" onClick={handleEdit}>Edit</button>}
         </div>
       )}
 

@@ -52,6 +52,28 @@ export async function POST(req: NextRequest) {
 
   const data = await req.json();
 
+  // Check if there's an existing submitted standup - only BM and Owner can edit submitted standups
+  const existingStandup = await prisma.standup.findUnique({
+    where: {
+      brand_id_user_id_session_standup_date: {
+        brand_id: session.user.brand_id || data.brand_id,
+        user_id: session.user.id,
+        session: data.session,
+        standup_date: new Date(data.standup_date + 'T00:00:00'),
+      },
+    },
+  });
+
+  if (existingStandup && existingStandup.status === 'submitted') {
+    const canEdit = ['brand_manager', 'owner'].includes(session.user.role);
+    if (!canEdit) {
+      return NextResponse.json(
+        { error: 'Hanya Brand Manager dan Owner yang dapat mengedit sprint yang sudah disubmit' },
+        { status: 403 }
+      );
+    }
+  }
+
   const standup = await prisma.standup.upsert({
     where: {
       brand_id_user_id_session_standup_date: {
