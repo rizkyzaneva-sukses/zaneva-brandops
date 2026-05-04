@@ -52,11 +52,15 @@ export async function POST(req: NextRequest) {
 
   const data = await req.json();
 
+  // For owner/admin without brand_id, use 'holding' as brand identifier
+  const effectiveBrandId = session.user.brand_id || data.brand_id || 'holding';
+  const effectiveBrandName = session.user.brand_name || data.brand_name || 'Holding';
+
   // Check if there's an existing submitted standup - only BM and Owner can edit submitted standups
   const existingStandup = await prisma.standup.findUnique({
     where: {
       brand_id_user_id_session_standup_date: {
-        brand_id: session.user.brand_id || data.brand_id,
+        brand_id: effectiveBrandId,
         user_id: session.user.id,
         session: data.session,
         standup_date: new Date(data.standup_date + 'T00:00:00'),
@@ -77,7 +81,7 @@ export async function POST(req: NextRequest) {
   const standup = await prisma.standup.upsert({
     where: {
       brand_id_user_id_session_standup_date: {
-        brand_id: session.user.brand_id || data.brand_id,
+        brand_id: effectiveBrandId,
         user_id: session.user.id,
         session: data.session,
         standup_date: new Date(data.standup_date + 'T00:00:00'),
@@ -89,8 +93,8 @@ export async function POST(req: NextRequest) {
       status: data.status || 'draft',
     },
     create: {
-      brand_id: session.user.brand_id || data.brand_id,
-      brand_name: session.user.brand_name || data.brand_name || '',
+      brand_id: effectiveBrandId,
+      brand_name: effectiveBrandName,
       user_id: session.user.id,
       user_name: session.user.full_name,
       user_role: session.user.role,
