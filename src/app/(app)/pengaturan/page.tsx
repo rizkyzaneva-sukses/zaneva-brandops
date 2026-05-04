@@ -48,6 +48,9 @@ export default function PengaturanPage() {
   const [resetPwUser, setResetPwUser] = useState<User | null>(null);
   const [resetPwValue, setResetPwValue] = useState('zaneva123');
   const [resetPwMsg, setResetPwMsg] = useState('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteUser, setDeleteUser] = useState<User | null>(null);
+  const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
@@ -183,6 +186,39 @@ export default function PengaturanPage() {
       setTimeout(() => { setShowResetPwModal(false); setResetPwMsg(''); }, 2000);
     } else {
       setResetPwMsg(`❌ ${data.error || 'Gagal reset password'}`);
+    }
+  }
+
+  async function handleToggleUserStatus(userId: string, currentStatus: boolean) {
+    setTogglingUserId(userId);
+    const res = await fetch(`/api/users/${userId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_active: !currentStatus }),
+    });
+    setTogglingUserId(null);
+    if (res.ok) {
+      showToast(`✅ User berhasil ${!currentStatus ? 'diaktifkan' : 'dinonaktifkan'}`);
+      fetch('/api/users').then(r => r.json()).then(setUsers);
+    } else {
+      const data = await res.json();
+      showToast(`❌ ${data.error || 'Gagal mengubah status'}`);
+    }
+  }
+
+  async function handleDeleteUser() {
+    if (!deleteUser) return;
+    setSaving(true);
+    const res = await fetch(`/api/users/${deleteUser.id}`, { method: 'DELETE' });
+    const data = await res.json();
+    setSaving(false);
+    if (res.ok) {
+      showToast(`✅ ${data.message}`);
+      setShowDeleteModal(false);
+      setDeleteUser(null);
+      fetch('/api/users').then(r => r.json()).then(setUsers);
+    } else {
+      showToast(`❌ ${data.error || 'Gagal menghapus user'}`);
     }
   }
 
@@ -330,13 +366,42 @@ export default function PengaturanPage() {
                     <td style={{ color: 'var(--text-muted)', fontSize: 12, fontFamily: 'monospace' }}>{u.email}</td>
                     <td><span className={`badge ${ROLE_CLASS[u.role] || 'role-owner'}`} style={{ fontSize: 9 }}>{ROLE_LABELS[u.role] || u.role}</span></td>
                     <td style={{ color: 'var(--gold)', fontSize: 13 }}>{u.brand_name || '(Semua)'}</td>
-                    <td><span className={`badge ${u.is_active ? 'status-on-track' : 'status-behind'}`} style={{ fontSize: 9 }}>{u.is_active ? 'Aktif' : 'Nonaktif'}</span></td>
                     <td>
-                      {currentUser && ['owner', 'admin'].includes(currentUser.role) && (
-                        <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => { setResetPwUser(u); setResetPwValue('zaneva123'); setResetPwMsg(''); setShowResetPwModal(true); }}>
-                          🔑 Reset PW
+                      {currentUser?.role === 'owner' && u.id !== currentUser.id ? (
+                        <button
+                          onClick={() => handleToggleUserStatus(u.id, u.is_active)}
+                          disabled={togglingUserId === u.id}
+                          title={u.is_active ? 'Klik untuk nonaktifkan' : 'Klik untuk aktifkan'}
+                          style={{
+                            width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
+                            background: u.is_active ? 'var(--green)' : 'var(--border)',
+                            transition: 'background 0.2s', position: 'relative',
+                            opacity: togglingUserId === u.id ? 0.5 : 1,
+                          }}
+                        >
+                          <div style={{ position: 'absolute', top: 3, left: u.is_active ? 23 : 3, width: 18, height: 18, borderRadius: '50%', background: 'white', transition: 'left 0.2s' }} />
                         </button>
+                      ) : (
+                        <span className={`badge ${u.is_active ? 'status-on-track' : 'status-behind'}`} style={{ fontSize: 9 }}>{u.is_active ? 'Aktif' : 'Nonaktif'}</span>
                       )}
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        {currentUser && ['owner', 'admin'].includes(currentUser.role) && (
+                          <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => { setResetPwUser(u); setResetPwValue('zaneva123'); setResetPwMsg(''); setShowResetPwModal(true); }}>
+                            🔑 Reset PW
+                          </button>
+                        )}
+                        {currentUser?.role === 'owner' && u.id !== currentUser.id && (
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            style={{ fontSize: 11, color: '#EF4444' }}
+                            onClick={() => { setDeleteUser(u); setShowDeleteModal(true); }}
+                          >
+                            🗑 Hapus
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -407,6 +472,28 @@ export default function PengaturanPage() {
                   <button className="btn btn-secondary" onClick={() => setShowResetPwModal(false)}>Batal</button>
                   <button className="btn btn-primary" onClick={handleResetPassword} disabled={saving || resetPwValue.length < 6}>
                     {saving ? 'Menyimpan...' : 'Reset Password'}
+                  </button>
+                </div>
+              </div>
+            </Modal>
+          )}
+
+          {/* Delete User Modal */}
+          {showDeleteModal && deleteUser && (
+            <Modal title="Hapus User" onClose={() => { setShowDeleteModal(false); setDeleteUser(null); }}>
+              <div style={{ display: 'grid', gap: 14 }}>
+                <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '12px 16px' }}>
+                  <p style={{ fontSize: 13, color: '#FCA5A5', margin: 0 }}>
+                    ⚠️ <strong>Perhatian!</strong> Menghapus user akan menghapus SEMUA data terkait (standup, laporan harian). Aksi ini tidak bisa dibatalkan.
+                  </p>
+                </div>
+                <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                  Yakin ingin menghapus user <strong style={{ color: '#EF4444' }}>{deleteUser.full_name}</strong> ({deleteUser.email})?
+                </p>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                  <button className="btn btn-secondary" onClick={() => { setShowDeleteModal(false); setDeleteUser(null); }}>Batal</button>
+                  <button className="btn" style={{ background: '#EF4444', color: 'white', border: 'none' }} onClick={handleDeleteUser} disabled={saving}>
+                    {saving ? 'Menghapus...' : '🗑 Hapus Permanen'}
                   </button>
                 </div>
               </div>
