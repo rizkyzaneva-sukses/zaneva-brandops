@@ -6,6 +6,14 @@ import { ROLE_LABELS, ROLE_CLASS } from '@/lib/utils';
 interface Brand { id: string; name: string; description: string; status: string; }
 interface User { id: string; email: string; full_name: string; role: string; brand_id: string | null; brand_name: string | null; is_active: boolean; }
 interface KpiConfig { kpi_item_id: string; kpi_name: string; is_enabled: boolean; kpi_item: { unit: string; category: string; description: string | null; auto_source_role?: string | null }; }
+interface ImportSummary {
+  source_file: string;
+  imported_user_emails: string[];
+  skipped: { type: string; id: string; reason: string; replacement_id?: string }[];
+  counts: Record<string, number>;
+  default_password_for_imported_users: string;
+  imported_users_active: boolean;
+}
 
 const ROLES = [
   { value: 'brand_manager', label: 'Brand Manager' },
@@ -32,6 +40,9 @@ export default function PengaturanPage() {
   const [editKpiId, setEditKpiId] = useState<string | null>(null);
   const [showKpiModal, setShowKpiModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
@@ -170,6 +181,39 @@ export default function PengaturanPage() {
     } else {
       showToast('❌ Gagal mereset data');
     }
+  }
+
+  async function handleImportData() {
+    if (!importFile) {
+      showToast('❌ Pilih file JSON terlebih dahulu');
+      return;
+    }
+
+    if (!confirm('Import ini akan sinkronkan master KPI, standup config, target KPI, dan data histori dari file JSON. Lanjutkan?')) return;
+
+    const formData = new FormData();
+    formData.append('file', importFile);
+
+    setImporting(true);
+    setImportSummary(null);
+
+    const res = await fetch('/api/admin/import-data', {
+      method: 'POST',
+      body: formData,
+    });
+
+    const data = await res.json();
+    setImporting(false);
+
+    if (!res.ok) {
+      showToast(`❌ ${data.error || 'Import gagal'}`);
+      return;
+    }
+
+    setImportSummary(data);
+    showToast('✅ Data berhasil diimport');
+    fetch('/api/brands').then(r => r.json()).then(setBrands);
+    fetch('/api/users').then(r => r.json()).then(setUsers);
   }
 
   const tabs = currentUser?.role === 'owner' ? ['Brand', 'Tim', 'KPI Config', 'Sistem (Owner)'] : ['Brand', 'Tim', 'KPI Config'];
@@ -407,6 +451,49 @@ export default function PengaturanPage() {
       {/* SISTEM TAB */}
       {activeTab === 'Sistem (Owner)' && currentUser?.role === 'owner' && (
         <div style={{ display: 'grid', gap: 24 }}>
+          <div className="card" style={{ border: '1px solid rgba(34,197,94,0.25)', background: 'rgba(34,197,94,0.05)' }}>
+            <h3 style={{ fontSize: 16, fontWeight: 600, color: '#22C55E', marginBottom: 8 }}>Import Data JSON</h3>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
+              Upload file export lama untuk mengimpor brand, user histori, standup, daily report, konfigurasi sprint, dan KPI ke database aplikasi ini.
+              User hasil impor akan dibuat dalam keadaan nonaktif supaya akses login tetap terkendali.
+            </p>
+
+            <div style={{ display: 'grid', gap: 12 }}>
+              <input
+                className="input"
+                type="file"
+                accept=".json,application/json"
+                onChange={e => setImportFile(e.target.files?.[0] || null)}
+              />
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                <button className="btn" style={{ background: '#22C55E', color: '#04130A', border: 'none' }} onClick={handleImportData} disabled={importing || !importFile}>
+                  {importing ? 'Mengimpor...' : 'Import Sekarang'}
+                </button>
+                {importFile && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{importFile.name}</span>}
+              </div>
+            </div>
+
+            {importSummary && (
+              <div style={{ marginTop: 18, padding: 16, borderRadius: 12, border: '1px solid var(--border)', background: 'rgba(10,14,26,0.35)' }}>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>File: <span style={{ color: 'var(--gold)' }}>{importSummary.source_file}</span></div>
+                  <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Record aktif setelah import:</div>
+                  <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    {Object.entries(importSummary.counts).map(([key, value]) => (
+                      <span key={key} className="badge status-on-track" style={{ fontSize: 11 }}>{key}: {value}</span>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                    User histori dari file: {importSummary.imported_user_emails.length} akun, status login {importSummary.imported_users_active ? 'aktif' : 'nonaktif'}.
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                    Record dilewati: {importSummary.skipped.length}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="card" style={{ border: '1px solid rgba(245,158,11,0.3)', background: 'rgba(245,158,11,0.05)' }}>
             <h3 style={{ fontSize: 16, fontWeight: 600, color: '#F59E0B', marginBottom: 8 }}>🛠 Generate Dummy Data</h3>
             <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>

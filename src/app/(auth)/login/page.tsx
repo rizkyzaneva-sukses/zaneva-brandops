@@ -87,27 +87,11 @@ export default function LoginPage() {
           </form>
         </div>
 
-        {/* Demo accounts */}
         <div className="card" style={{ marginTop: 16, padding: 20 }}>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Demo Accounts</p>
-          <div style={{ display: 'grid', gap: 6 }}>
-            {[
-              { email: 'owner@zaneva.id', pass: 'owner123', label: 'Owner', color: '#94A3B8' },
-              { email: 'bm.zaneva@zaneva.id', pass: 'bm123', label: 'Brand Manager', color: '#F59E0B' },
-              { email: 'creative.zaneva@zaneva.id', pass: 'creative123', label: 'Creative', color: '#A855F7' },
-              { email: 'pr.zaneva@zaneva.id', pass: 'pr123', label: 'PR', color: '#EC4899' },
-              { email: 'marketplace.zaneva@zaneva.id', pass: 'mp123', label: 'Marketplace', color: '#3B82F6' },
-            ].map(acc => (
-              <button
-                key={acc.email}
-                onClick={() => { setEmail(acc.email); setPassword(acc.pass); }}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', textAlign: 'left', width: '100%' }}
-              >
-                <span style={{ fontSize: 10, fontWeight: 700, color: acc.color, background: `${acc.color}22`, border: `1px solid ${acc.color}44`, borderRadius: 4, padding: '2px 6px', flexShrink: 0 }}>{acc.label}</span>
-                <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{acc.email}</span>
-              </button>
-            ))}
-          </div>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Akses Login</p>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            Gunakan akun yang sudah diberikan oleh owner. Akun demo publik sudah dinonaktifkan agar data operasional tetap aman.
+          </p>
         </div>
       </div>
     </div>

@@ -64,17 +64,11 @@ Buka http://localhost:3000
 npm run setup
 ```
 
-## 👥 Demo Accounts
+## 👤 Login App
 
-| Email | Password | Role |
-|-------|----------|------|
-| owner@zaneva.id | owner123 | Owner |
-| bm.zaneva@zaneva.id | bm123 | Brand Manager — Zaneva |
-| creative.zaneva@zaneva.id | creative123 | Creative — Zaneva |
-| pr.zaneva@zaneva.id | pr123 | Public Relation — Zaneva |
-| marketplace.zaneva@zaneva.id | mp123 | Admin Marketplace — Zaneva |
-| rnd.zaneva@zaneva.id | rnd123 | R&D — Zaneva |
-| bm.besyari@zaneva.id | bm123 | Brand Manager — Be.Syari |
+- App sekarang disiapkan untuk penggunaan nyata, bukan demo publik.
+- Kredensial owner dan password dikelola manual di database, jangan disimpan di repo.
+- User histori hasil import bisa disimpan untuk relasi data, tetapi sebaiknya tetap nonaktif untuk login kecuali memang ingin dibuka aksesnya.
 
 ## 🏗 Struktur Project
 
@@ -124,8 +118,22 @@ zaneva-brandops/
 1. Push ke GitHub
 2. Create new app di EasyPanel → Connect repo
 3. Set environment variables (DATABASE_URL, SESSION_SECRET, SESSION_COOKIE_NAME)
-4. Build command: `npm install && npx prisma generate && npx prisma db push && node prisma/seed.js && npm run build`
+4. Build command: `npm install && npx prisma generate && npx prisma db push && npm run build`
 5. Start command: `npm start`
+
+## 📥 Import Data
+
+- Import JSON histori bisa dijalankan via terminal:
+```bash
+npm run db:import -- "C:\path\to\zaneva_export.json"
+```
+- Owner juga bisa import langsung dari menu `Pengaturan` → `Sistem (Owner)` → `Import Data JSON`
+- Import akan menormalkan brand, user histori, standup config, KPI item, KPI brand config, dan KPI weekly target
+- Default perilaku import sekarang: user hasil import dibuat nonaktif untuk login
+
+## 📚 Dokumentasi Tambahan
+
+- Lihat [APP_OPERATIONS.md](D:/APP/zaneva-brandops/zaneva-brandops/APP_OPERATIONS.md) untuk panduan operasional, import, login owner, dan checklist deploy
 
 ## 📋 KPI Business Logic
 
