@@ -44,6 +44,10 @@ export default function PengaturanPage() {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
   const [importing, setImporting] = useState(false);
+  const [showResetPwModal, setShowResetPwModal] = useState(false);
+  const [resetPwUser, setResetPwUser] = useState<User | null>(null);
+  const [resetPwValue, setResetPwValue] = useState('zaneva123');
+  const [resetPwMsg, setResetPwMsg] = useState('');
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
@@ -161,6 +165,25 @@ export default function PengaturanPage() {
       auto_source_role: c.kpi_item.auto_source_role || '',
     });
     setShowKpiModal(true);
+  }
+
+  async function handleResetPassword() {
+    if (!resetPwUser) return;
+    setSaving(true);
+    setResetPwMsg('');
+    const res = await fetch('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: resetPwUser.id, new_password: resetPwValue }),
+    });
+    const data = await res.json();
+    setSaving(false);
+    if (res.ok) {
+      setResetPwMsg(`✅ ${data.message}`);
+      setTimeout(() => { setShowResetPwModal(false); setResetPwMsg(''); }, 2000);
+    } else {
+      setResetPwMsg(`❌ ${data.error || 'Gagal reset password'}`);
+    }
   }
 
   async function handleGenerateDummy() {
@@ -299,7 +322,7 @@ export default function PengaturanPage() {
           </div>
           <div className="card">
             <table className="table">
-              <thead><tr><th>Nama</th><th>Email</th><th>Role</th><th>Brand</th><th>Status</th></tr></thead>
+              <thead><tr><th>Nama</th><th>Email</th><th>Role</th><th>Brand</th><th>Status</th><th>Aksi</th></tr></thead>
               <tbody>
                 {users.map(u => (
                   <tr key={u.id}>
@@ -308,6 +331,13 @@ export default function PengaturanPage() {
                     <td><span className={`badge ${ROLE_CLASS[u.role] || 'role-owner'}`} style={{ fontSize: 9 }}>{ROLE_LABELS[u.role] || u.role}</span></td>
                     <td style={{ color: 'var(--gold)', fontSize: 13 }}>{u.brand_name || '(Semua)'}</td>
                     <td><span className={`badge ${u.is_active ? 'status-on-track' : 'status-behind'}`} style={{ fontSize: 9 }}>{u.is_active ? 'Aktif' : 'Nonaktif'}</span></td>
+                    <td>
+                      {currentUser && ['owner', 'admin'].includes(currentUser.role) && (
+                        <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => { setResetPwUser(u); setResetPwValue('zaneva123'); setResetPwMsg(''); setShowResetPwModal(true); }}>
+                          🔑 Reset PW
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -345,12 +375,38 @@ export default function PengaturanPage() {
                 <div>
                   <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Password Default</label>
                   <input className="input" type="text" value={userForm.password} onChange={e => setUserForm(p => ({ ...p, password: e.target.value }))} />
-                  <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>User bisa ganti password setelah login pertama (fitur reset manual)</p>
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>User bisa ganti password sendiri setelah login (via tombol 🔑 Ganti Password di sidebar)</p>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
                   <button type="button" className="btn btn-secondary" onClick={() => setShowUserModal(false)}>Batal</button>
                   <button type="button" className="btn btn-primary" onClick={handleCreateUser} disabled={saving || !userForm.full_name.trim() || !userForm.email.trim()}>
                     {saving ? 'Menyimpan...' : 'Tambah User'}
+                  </button>
+                </div>
+              </div>
+            </Modal>
+          )}
+
+          {/* Reset Password Modal */}
+          {showResetPwModal && resetPwUser && (
+            <Modal title={`Reset Password: ${resetPwUser.full_name}`} onClose={() => setShowResetPwModal(false)}>
+              <div style={{ display: 'grid', gap: 14 }}>
+                <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                  Reset password untuk <strong>{resetPwUser.email}</strong>. User akan menggunakan password baru ini untuk login.
+                </p>
+                {resetPwMsg && (
+                  <div style={{ background: resetPwMsg.startsWith('✅') ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', border: `1px solid ${resetPwMsg.startsWith('✅') ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`, borderRadius: 8, padding: '10px 14px', color: resetPwMsg.startsWith('✅') ? '#86EFAC' : '#FCA5A5', fontSize: 13 }}>
+                    {resetPwMsg}
+                  </div>
+                )}
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Password Baru *</label>
+                  <input className="input" type="text" value={resetPwValue} onChange={e => setResetPwValue(e.target.value)} placeholder="Minimal 6 karakter" />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                  <button className="btn btn-secondary" onClick={() => setShowResetPwModal(false)}>Batal</button>
+                  <button className="btn btn-primary" onClick={handleResetPassword} disabled={saving || resetPwValue.length < 6}>
+                    {saving ? 'Menyimpan...' : 'Reset Password'}
                   </button>
                 </div>
               </div>
@@ -508,7 +564,7 @@ export default function PengaturanPage() {
           <div className="card" style={{ border: '1px solid rgba(245,158,11,0.3)', background: 'rgba(245,158,11,0.05)' }}>
             <h3 style={{ fontSize: 16, fontWeight: 600, color: '#F59E0B', marginBottom: 8 }}>🛠 Generate Dummy Data</h3>
             <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
-              Isi database dengan data bohongan (Standup Pagi/Sore, Weekly Report, Target KPI, dan Snapshot KPI harian). 
+              Isi database dengan data bohongan (Standup Pagi/Sore, Weekly Report, Target KPI, dan Snapshot KPI harian).
               Gunakan ini untuk melihat bagaimana aplikasi bekerja dengan data penuh. Data asli tidak akan dihapus.
             </p>
             <button className="btn" style={{ background: '#F59E0B', color: 'white', border: 'none' }} onClick={handleGenerateDummy} disabled={saving}>
@@ -519,7 +575,7 @@ export default function PengaturanPage() {
           <div className="card" style={{ border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.05)' }}>
             <h3 style={{ fontSize: 16, fontWeight: 600, color: '#EF4444', marginBottom: 8 }}>⚠️ Hapus Semua Data Transaksi</h3>
             <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
-              Menghapus <strong>SEMUA</strong> data operasional seperti Standup, Laporan Harian/Mingguan/Bulanan, serta data rekapan KPI. 
+              Menghapus <strong>SEMUA</strong> data operasional seperti Standup, Laporan Harian/Mingguan/Bulanan, serta data rekapan KPI.
               Master data (Brand, User, Kamus KPI) <strong>tidak akan dihapus</strong>.
               Gunakan ini sebelum benar-benar menggunakan aplikasi secara nyata (setelah selesai coba-coba dummy).
             </p>

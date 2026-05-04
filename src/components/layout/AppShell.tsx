@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, FormEvent } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { SessionUser } from '@/lib/session';
@@ -24,12 +24,51 @@ export default function AppShell({ user, children }: { user: SessionUser; childr
   const pathname = usePathname();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [pwForm, setPwForm] = useState({ current_password: '', new_password: '', confirm_password: '' });
+  const [pwError, setPwError] = useState('');
+  const [pwSuccess, setPwSuccess] = useState('');
+  const [pwLoading, setPwLoading] = useState(false);
 
   const visibleNav = NAV_ITEMS.filter(item => canAccess(user.role, item.roles));
 
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' });
     router.push('/login');
+  }
+
+  async function handleChangePassword(e: FormEvent) {
+    e.preventDefault();
+    setPwError('');
+    setPwSuccess('');
+
+    if (pwForm.new_password !== pwForm.confirm_password) {
+      setPwError('Konfirmasi password tidak cocok');
+      return;
+    }
+
+    if (pwForm.new_password.length < 6) {
+      setPwError('Password baru minimal 6 karakter');
+      return;
+    }
+
+    setPwLoading(true);
+    const res = await fetch('/api/auth/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ current_password: pwForm.current_password, new_password: pwForm.new_password }),
+    });
+
+    const data = await res.json();
+    setPwLoading(false);
+
+    if (!res.ok) {
+      setPwError(data.error || 'Gagal mengubah password');
+    } else {
+      setPwSuccess('Password berhasil diubah!');
+      setPwForm({ current_password: '', new_password: '', confirm_password: '' });
+      setTimeout(() => { setShowPasswordModal(false); setPwSuccess(''); }, 2000);
+    }
   }
 
   const SidebarContent = () => (
@@ -80,9 +119,14 @@ export default function AppShell({ user, children }: { user: SessionUser; childr
             {ROLE_LABELS[user.role] || user.role}
           </span>
         </div>
-        <button className="btn btn-ghost btn-sm" onClick={handleLogout} style={{ width: '100%', justifyContent: 'center', fontSize: 12 }}>
-          🚪 Keluar
-        </button>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button className="btn btn-ghost btn-sm" onClick={() => { setShowPasswordModal(true); setPwError(''); setPwSuccess(''); setPwForm({ current_password: '', new_password: '', confirm_password: '' }); }} style={{ flex: 1, justifyContent: 'center', fontSize: 11 }}>
+            🔑 Ganti Password
+          </button>
+          <button className="btn btn-ghost btn-sm" onClick={handleLogout} style={{ flex: 1, justifyContent: 'center', fontSize: 11 }}>
+            🚪 Keluar
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -117,6 +161,50 @@ export default function AppShell({ user, children }: { user: SessionUser; childr
           {children}
         </div>
       </main>
+
+      {/* Change Password Modal */}
+      {showPasswordModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, width: '100%', maxWidth: 420 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', borderBottom: '1px solid var(--border)' }}>
+              <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>🔑 Ganti Password</h2>
+              <button onClick={() => setShowPasswordModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 20 }}>✕</button>
+            </div>
+            <form onSubmit={handleChangePassword} style={{ padding: 24 }}>
+              {pwError && (
+                <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, color: '#FCA5A5', fontSize: 13 }}>
+                  {pwError}
+                </div>
+              )}
+              {pwSuccess && (
+                <div style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, color: '#86EFAC', fontSize: 13 }}>
+                  ✅ {pwSuccess}
+                </div>
+              )}
+              <div style={{ display: 'grid', gap: 14 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Password Lama *</label>
+                  <input className="input" type="password" value={pwForm.current_password} onChange={e => setPwForm(p => ({ ...p, current_password: e.target.value }))} placeholder="Masukkan password lama" required />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Password Baru *</label>
+                  <input className="input" type="password" value={pwForm.new_password} onChange={e => setPwForm(p => ({ ...p, new_password: e.target.value }))} placeholder="Minimal 6 karakter" required />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Konfirmasi Password Baru *</label>
+                  <input className="input" type="password" value={pwForm.confirm_password} onChange={e => setPwForm(p => ({ ...p, confirm_password: e.target.value }))} placeholder="Ulangi password baru" required />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 4 }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setShowPasswordModal(false)}>Batal</button>
+                  <button type="submit" className="btn btn-primary" disabled={pwLoading}>
+                    {pwLoading ? 'Menyimpan...' : 'Simpan Password'}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @media (min-width: 768px) {
