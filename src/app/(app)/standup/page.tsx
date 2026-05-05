@@ -48,7 +48,14 @@ export default function StandupPage() {
   const [recapOpen, setRecapOpen] = useState(false);
   const [dynamicLogFields, setDynamicLogFields] = useState<any[]>([]);
 
-  const today = new Date().toISOString().split('T')[0];
+  // Use local date (YYYY-MM-DD) to match user's actual day
+  const today = (() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  })();
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
     setToast({ msg, type });
@@ -79,10 +86,10 @@ export default function StandupPage() {
       }
     }
 
-    // Yesterday standup (sore)
+    // Yesterday standup (sore) - use local date
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
-    const yd = yesterday.toISOString().split('T')[0];
+    const yd = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
     const res2 = await fetch(`/api/standups?user_id=${userId}&date=${yd}&session=sore`);
     if (res2.ok) {
       const data2 = await res2.json();
@@ -137,48 +144,56 @@ export default function StandupPage() {
     if (!user) return;
     setSaving(true);
 
-    const dailyLogData: Record<string, string> = { ...dailyLog };
+    try {
+      const dailyLogData: Record<string, string> = { ...dailyLog };
 
-    // Merge content log
-    if (logConfig?.rows.some(r => r.unit === 'status')) {
-      for (const [key, val] of Object.entries(contentLog)) {
-        for (const [field, v] of Object.entries(val)) {
-          dailyLogData[`${key}_${field}`] = v;
+      // Merge content log
+      if (logConfig?.rows.some(r => r.unit === 'status')) {
+        for (const [key, val] of Object.entries(contentLog)) {
+          for (const [field, v] of Object.entries(val)) {
+            dailyLogData[`${key}_${field}`] = v;
+          }
         }
       }
-    }
 
-    const payload = {
-      session: tab,
-      standup_date: today,
-      answers,
-      daily_log: tab === 'sore' ? dailyLogData : {},
-      status,
-    };
+      const payload = {
+        session: tab,
+        standup_date: today,
+        answers,
+        daily_log: tab === 'sore' ? dailyLogData : {},
+        status,
+      };
 
-    const res = await fetch('/api/standups', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+      const res = await fetch('/api/standups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-    if (res.ok) {
-      showToast(status === 'submitted' ? `Sprint ${tab} berhasil disubmit! ✅` : 'Draft tersimpan');
-      fetchStandups(user.id);
+      if (res.ok) {
+        showToast(status === 'submitted' ? `Sprint ${tab} berhasil disubmit! ✅` : 'Draft tersimpan');
+        fetchStandups(user.id);
 
-      // Load KPI feedback after sore submit
-      if (status === 'submitted' && tab === 'sore' && user.brand_id) {
-        const week = getCurrentWeek();
-        const feedRes = await fetch(`/api/kpi-monitor?brand_id=${user.brand_id}&week_start=${week.week_start}&week_end=${week.week_end}&week_label=${encodeURIComponent(week.week_label)}`);
-        if (feedRes.ok) {
-          const feedData = await feedRes.json();
-          const relevant = (feedData.kpis || []).filter((k: { status: string }) => k.status);
-          setKpiFeedback(relevant);
-          setShowFeedback(true);
+        // Load KPI feedback after sore submit
+        if (status === 'submitted' && tab === 'sore' && user.brand_id) {
+          const week = getCurrentWeek();
+          const feedRes = await fetch(`/api/kpi-monitor?brand_id=${user.brand_id}&week_start=${week.week_start}&week_end=${week.week_end}&week_label=${encodeURIComponent(week.week_label)}`);
+          if (feedRes.ok) {
+            const feedData = await feedRes.json();
+            const relevant = (feedData.kpis || []).filter((k: { status: string }) => k.status);
+            setKpiFeedback(relevant);
+            setShowFeedback(true);
+          }
         }
+      } else {
+        const errData = await res.json().catch(() => null);
+        const errMsg = errData?.error || errData?.detail || 'Gagal menyimpan';
+        showToast(errMsg, 'error');
+        console.error('[Standup] Save failed:', res.status, errData);
       }
-    } else {
-      showToast('Gagal menyimpan', 'error');
+    } catch (err) {
+      console.error('[Standup] Network error:', err);
+      showToast('Gagal menyimpan: koneksi bermasalah', 'error');
     }
 
     setSaving(false);

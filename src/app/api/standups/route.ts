@@ -29,9 +29,9 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  if (date) where.standup_date = { gte: new Date(date + 'T00:00:00'), lte: new Date(date + 'T23:59:59') };
+  if (date) where.standup_date = { gte: new Date(date + 'T00:00:00.000Z'), lte: new Date(date + 'T23:59:59.999Z') };
   if (date_from && date_to) {
-    where.standup_date = { gte: new Date(date_from + 'T00:00:00'), lte: new Date(date_to + 'T23:59:59') };
+    where.standup_date = { gte: new Date(date_from + 'T00:00:00.000Z'), lte: new Date(date_to + 'T23:59:59.999Z') };
   }
   if (session_type) where.session = session_type;
   if (user_id) where.user_id = user_id;
@@ -52,9 +52,24 @@ export async function POST(req: NextRequest) {
 
   const data = await req.json();
 
-  // For owner/admin without brand_id, use 'holding' as brand identifier
-  const effectiveBrandId = session.user.brand_id || data.brand_id || 'holding';
-  const effectiveBrandName = session.user.brand_name || data.brand_name || 'Holding';
+  // Resolve brand_id: for owner/admin without brand_id, find or create a "Holding" brand
+  let effectiveBrandId = session.user.brand_id || data.brand_id;
+  let effectiveBrandName = session.user.brand_name || data.brand_name || 'Holding';
+
+  if (!effectiveBrandId) {
+    // Find or create a Holding brand for owner/admin users
+    let holdingBrand = await prisma.brand.findFirst({ where: { name: 'Holding' } });
+    if (!holdingBrand) {
+      holdingBrand = await prisma.brand.create({
+        data: { name: 'Holding', description: 'Holding company brand for owner/admin standups', status: 'active' },
+      });
+    }
+    effectiveBrandId = holdingBrand.id;
+    effectiveBrandName = holdingBrand.name;
+  }
+
+  // Normalize standup_date to UTC midnight to avoid timezone mismatches
+  const standupDate = new Date(data.standup_date + 'T00:00:00.000Z');
 
   // Check if there's an existing submitted standup - only BM and Owner can edit submitted standups
   const existingStandup = await prisma.standup.findUnique({
@@ -63,7 +78,7 @@ export async function POST(req: NextRequest) {
         brand_id: effectiveBrandId,
         user_id: session.user.id,
         session: data.session,
-        standup_date: new Date(data.standup_date + 'T00:00:00'),
+        standup_date: standupDate,
       },
     },
   });
@@ -78,35 +93,41 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const standup = await prisma.standup.upsert({
-    where: {
-      brand_id_user_id_session_standup_date: {
-        brand_id: effectiveBrandId,
-        user_id: session.user.id,
-        session: data.session,
-        standup_date: new Date(data.standup_date + 'T00:00:00'),
+  try {
+    const standup = await prisma.standup.upsert({
+      where: {
+        brand_id_user_id_session_standup_date: {
+          brand_id: effectiveBrandId,
+          user_id: session.user.id,
+          session: data.session,
+          standup_date: standupDate,
+        },
       },
-    },
-    update: {
-      answers: data.answers || {},
-      daily_log: data.daily_log || {},
-      status: data.status || 'draft',
-    },
-    create: {
-      brand_id: effectiveBrandId,
-      brand_name: effectiveBrandName,
-      user_id: session.user.id,
-      user_name: session.user.full_name,
-      user_role: session.user.role,
-      session: data.session,
-      standup_date: new Date(data.standup_date + 'T00:00:00'),
-      answers: data.answers || {},
-      daily_log: data.daily_log || {},
-      status: data.status || 'draft',
-    },
-  });
+      update: {
+        answers: data.answers || {},
+        daily_log: data.daily_log || {},
+        status: data.status || 'draft',
+      },
+      create: {
+        brand_id: effectiveBrandId,
+        brand_name: effectiveBrandName,
+        user_id: session.user.id,
+        user_name: session.user.full_name,
+        user_role: session.user.role,
+        session: data.session,
+        standup_date: standupDate,
+        answers: data.answers || {},
+        daily_log: data.daily_log || {},
+        status: data.status || 'draft',
+      },
+    });
 
-  return NextResponse.json(standup);
+    return NextResponse.json(standup);
+  } catch (error: unknown) {
+    console.error('[Standup POST] Error:', error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: 'Gagal menyimpan standup', detail: message }, { status: 500 });
+  }
 }
 
 export async function PUT(req: NextRequest) {
