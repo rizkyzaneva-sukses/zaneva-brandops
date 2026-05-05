@@ -22,7 +22,7 @@ const VALID_REPORT_CATEGORY = new Set(['creative', 'public_relation', 'marketpla
 const VALID_KPI_CATEGORY = new Set(['manual', 'auto_daily_log', 'auto_sum']);
 const VALID_KPI_UNIT = new Set(['currency', 'number', 'percent']);
 const VALID_KPI_AGGREGATION = new Set(['sum', 'avg', 'count']);
-const VALID_KPI_PLATFORM = new Set(['shopee', 'tiktok', 'tokopedia']);
+const VALID_KPI_PLATFORM = new Set(['shopee', 'tiktok']);
 const DEFAULT_PASSWORD = process.env.IMPORT_DEFAULT_PASSWORD || 'zaneva123';
 const IMPORT_IMPORTED_USERS_ACTIVE = process.env.IMPORT_IMPORTED_USERS_ACTIVE === 'true';
 
@@ -37,8 +37,8 @@ const BRAND_ALIASES = {
 const KPI_OVERRIDES = {
   'Omzet Shopee': { id: 'kpi-omzet-shopee', name: 'Omzet Shopee', auto_source_role: 'brand_manager', auto_source: 'omzet_shopee', auto_aggregation: 'sum', unit: 'currency', order_num: 1, platform: 'shopee' },
   'Omzet TikTok Shop': { id: 'kpi-omzet-tiktok', name: 'Omzet TikTok', auto_source_role: 'brand_manager', auto_source: 'omzet_tiktok', auto_aggregation: 'sum', unit: 'currency', order_num: 2, platform: 'tiktok' },
-  'Omzet MP Lain': { id: 'kpi-omzet-tokopedia', name: 'Omzet Tokopedia', auto_source_role: 'brand_manager', auto_source: 'omzet_tokopedia', auto_aggregation: 'sum', unit: 'currency', order_num: 3, platform: 'tokopedia' },
-  'Total GMV': { id: 'kpi-total-gmv', name: 'Total GMV', auto_source_role: null, auto_source: 'shopee+tiktok+tokopedia', auto_aggregation: 'sum', unit: 'currency', category: 'auto_sum', order_num: 4 },
+  'Omzet MP Lain': { id: 'kpi-omzet-lainnya', name: 'Omzet Lainnya', auto_source_role: 'brand_manager', auto_source: 'omzet_lainnya', auto_aggregation: 'sum', unit: 'currency', order_num: 3 },
+  'Total GMV': { id: 'kpi-total-gmv', name: 'Total GMV', auto_source_role: null, auto_source: null, auto_aggregation: 'sum', unit: 'currency', category: 'auto_sum', order_num: 4 },
   'Spending Iklan': { id: 'kpi-iklan-spend', name: 'Iklan Spend', auto_source_role: 'owner', auto_source: 'iklan_spend', auto_aggregation: 'sum', unit: 'currency', order_num: 5 },
   'ROAS Iklan': { id: 'kpi-roas-iklan', name: 'ROAS Iklan', auto_source_role: 'owner', auto_source: 'roas_iklan', auto_aggregation: 'avg', unit: 'number', order_num: 6 },
   'Affiliator Aktif Posting': { id: 'kpi-affiliator-aktif', name: 'Affiliator Aktif', auto_source_role: 'public_relation', auto_source: 'affiliator_aktif_count', auto_aggregation: 'avg', unit: 'number', order_num: 7 },

@@ -170,6 +170,21 @@ export default function PengaturanPage() {
     setShowKpiModal(true);
   }
 
+  async function handleDeleteKpi(kpiItemId: string, kpiName: string) {
+    if (!confirm(`Yakin ingin menghapus KPI "${kpiName}"? Data terkait (target, snapshot) juga akan dihapus.`)) return;
+    const res = await fetch(`/api/kpi-monitor/items?id=${kpiItemId}`, { method: 'DELETE' });
+    if (res.ok) {
+      showToast(`✅ KPI "${kpiName}" berhasil dihapus`);
+      if (selectedBrandForKpi) {
+        fetch(`/api/kpi-monitor/items?brand_id=${selectedBrandForKpi}`)
+          .then(r => r.json()).then(setKpiConfigs);
+      }
+    } else {
+      const d = await res.json();
+      showToast(`❌ ${d.error || 'Gagal menghapus KPI'}`);
+    }
+  }
+
   async function handleResetPassword() {
     if (!resetPwUser) return;
     setSaving(true);
@@ -542,6 +557,7 @@ export default function PengaturanPage() {
                           <div style={{ position: 'absolute', top: 3, left: c.is_enabled ? 23 : 3, width: 18, height: 18, borderRadius: '50%', background: 'white', transition: 'left 0.2s' }} />
                         </button>
                         <button className="btn btn-ghost btn-sm" onClick={() => openEditKpiModal(c)} style={{ padding: '4px 8px', fontSize: 12 }}>Edit</button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => handleDeleteKpi(c.kpi_item_id, c.kpi_name)} style={{ padding: '4px 8px', fontSize: 12, color: '#EF4444' }}>Hapus</button>
                       </td>
                     </tr>
                   ))}
@@ -576,6 +592,12 @@ export default function PengaturanPage() {
                     </select>
                   </div>
                 </div>
+
+                {kpiForm.category === 'auto_sum' && (
+                  <div style={{ padding: '10px 12px', background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: 8, fontSize: 12, color: 'var(--text-secondary)' }}>
+                    💡 KPI bertipe <b>Auto Sum</b> akan otomatis menjumlahkan semua KPI bertipe &quot;Auto Daily Log&quot; yang bersatuan <b>Currency</b> dan aktif untuk brand ini. Contoh: Total GMV = Omzet Shopee + Omzet TikTok + Omzet Lainnya.
+                  </div>
+                )}
 
                 {kpiForm.category === 'auto_daily_log' && (
                   <div>

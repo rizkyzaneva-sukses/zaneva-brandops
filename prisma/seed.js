@@ -134,8 +134,8 @@ async function main() {
   const kpiItems = await Promise.all([
     prisma.kpiItem.upsert({ where: { id: 'kpi-omzet-shopee' }, update: {}, create: { id: 'kpi-omzet-shopee', name: 'Omzet Shopee', category: 'auto_daily_log', auto_source_role: 'brand_manager', auto_source: 'omzet_shopee', auto_aggregation: 'sum', unit: 'currency', order_num: 1 } }),
     prisma.kpiItem.upsert({ where: { id: 'kpi-omzet-tiktok' }, update: {}, create: { id: 'kpi-omzet-tiktok', name: 'Omzet TikTok', category: 'auto_daily_log', auto_source_role: 'brand_manager', auto_source: 'omzet_tiktok', auto_aggregation: 'sum', unit: 'currency', order_num: 2 } }),
-    prisma.kpiItem.upsert({ where: { id: 'kpi-omzet-tokopedia' }, update: {}, create: { id: 'kpi-omzet-tokopedia', name: 'Omzet Tokopedia', category: 'auto_daily_log', auto_source_role: 'brand_manager', auto_source: 'omzet_tokopedia', auto_aggregation: 'sum', unit: 'currency', order_num: 3 } }),
-    prisma.kpiItem.upsert({ where: { id: 'kpi-total-gmv' }, update: {}, create: { id: 'kpi-total-gmv', name: 'Total GMV', category: 'auto_sum', auto_aggregation: 'sum', unit: 'currency', order_num: 4, description: 'Omzet Shopee + TikTok + Tokopedia' } }),
+    prisma.kpiItem.upsert({ where: { id: 'kpi-omzet-lainnya' }, update: {}, create: { id: 'kpi-omzet-lainnya', name: 'Omzet Lainnya', category: 'auto_daily_log', auto_source_role: 'brand_manager', auto_source: 'omzet_lainnya', auto_aggregation: 'sum', unit: 'currency', order_num: 3 } }),
+    prisma.kpiItem.upsert({ where: { id: 'kpi-total-gmv' }, update: {}, create: { id: 'kpi-total-gmv', name: 'Total GMV', category: 'auto_sum', auto_aggregation: 'sum', unit: 'currency', order_num: 4, description: 'Omzet Shopee + TikTok + Lainnya' } }),
     prisma.kpiItem.upsert({ where: { id: 'kpi-roas-iklan' }, update: {}, create: { id: 'kpi-roas-iklan', name: 'ROAS Iklan', category: 'auto_daily_log', auto_source_role: 'brand_manager', auto_source: 'roas_iklan', auto_aggregation: 'avg', unit: 'number', order_num: 5 } }),
     prisma.kpiItem.upsert({ where: { id: 'kpi-total-order' }, update: {}, create: { id: 'kpi-total-order', name: 'Total Order', category: 'auto_daily_log', auto_source_role: 'admin_marketplace', auto_source: 'total_order', auto_aggregation: 'sum', unit: 'number', order_num: 6 } }),
     prisma.kpiItem.upsert({ where: { id: 'kpi-roas-marketplace' }, update: {}, create: { id: 'kpi-roas-marketplace', name: 'ROAS Marketplace', category: 'auto_daily_log', auto_source_role: 'admin_marketplace', auto_source: 'roas_daily', auto_aggregation: 'avg', unit: 'number', order_num: 7 } }),
@@ -148,8 +148,8 @@ async function main() {
   console.log(`✅ ${kpiItems.length} KPI items created`);
 
   // Create KPI Brand Configs for Zaneva
-  const kpiIds = ['kpi-omzet-shopee', 'kpi-omzet-tiktok', 'kpi-omzet-tokopedia', 'kpi-total-gmv', 'kpi-roas-iklan', 'kpi-total-order', 'kpi-roas-marketplace', 'kpi-affiliator-aktif', 'kpi-affiliator-baru', 'kpi-iklan-spend', 'kpi-campaign-aktif'];
-  const kpiNames = { 'kpi-omzet-shopee': 'Omzet Shopee', 'kpi-omzet-tiktok': 'Omzet TikTok', 'kpi-omzet-tokopedia': 'Omzet Tokopedia', 'kpi-total-gmv': 'Total GMV', 'kpi-roas-iklan': 'ROAS Iklan', 'kpi-total-order': 'Total Order', 'kpi-roas-marketplace': 'ROAS Marketplace', 'kpi-affiliator-aktif': 'Affiliator Aktif', 'kpi-affiliator-baru': 'Affiliator Baru', 'kpi-iklan-spend': 'Iklan Spend', 'kpi-campaign-aktif': 'Campaign Aktif' };
+  const kpiIds = ['kpi-omzet-shopee', 'kpi-omzet-tiktok', 'kpi-omzet-lainnya', 'kpi-total-gmv', 'kpi-roas-iklan', 'kpi-total-order', 'kpi-roas-marketplace', 'kpi-affiliator-aktif', 'kpi-affiliator-baru', 'kpi-iklan-spend', 'kpi-campaign-aktif'];
+  const kpiNames = { 'kpi-omzet-shopee': 'Omzet Shopee', 'kpi-omzet-tiktok': 'Omzet TikTok', 'kpi-omzet-lainnya': 'Omzet Lainnya', 'kpi-total-gmv': 'Total GMV', 'kpi-roas-iklan': 'ROAS Iklan', 'kpi-total-order': 'Total Order', 'kpi-roas-marketplace': 'ROAS Marketplace', 'kpi-affiliator-aktif': 'Affiliator Aktif', 'kpi-affiliator-baru': 'Affiliator Baru', 'kpi-iklan-spend': 'Iklan Spend', 'kpi-campaign-aktif': 'Campaign Aktif' };
 
   for (const kpiId of kpiIds) {
     for (const brand of [{ id: 'brand-zaneva', name: 'Zaneva' }, { id: 'brand-besyari', name: 'Be.Syari' }]) {
@@ -178,7 +178,7 @@ async function main() {
   const targets = [
     { kpi_item_id: 'kpi-omzet-shopee', kpi_name: 'Omzet Shopee', target_value: 25000000 },
     { kpi_item_id: 'kpi-omzet-tiktok', kpi_name: 'Omzet TikTok', target_value: 15000000 },
-    { kpi_item_id: 'kpi-omzet-tokopedia', kpi_name: 'Omzet Tokopedia', target_value: 10000000 },
+    { kpi_item_id: 'kpi-omzet-lainnya', kpi_name: 'Omzet Lainnya', target_value: 10000000 },
     { kpi_item_id: 'kpi-total-gmv', kpi_name: 'Total GMV', target_value: 50000000 },
     { kpi_item_id: 'kpi-roas-iklan', kpi_name: 'ROAS Iklan', target_value: 3.5 },
     { kpi_item_id: 'kpi-total-order', kpi_name: 'Total Order', target_value: 500 },

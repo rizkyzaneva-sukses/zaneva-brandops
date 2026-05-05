@@ -274,7 +274,6 @@ export const DAILY_LOG_CONFIG: Record<string, DailyLogConfig> = {
     rows: [
       { key: 'omzet_shopee', label: 'Omzet Shopee (Rp)', unit: 'currency', placeholder: '14000000' },
       { key: 'omzet_tiktok', label: 'Omzet TikTok Shop (Rp)', unit: 'currency', placeholder: '8000000' },
-      { key: 'omzet_tokopedia', label: 'Omzet Tokopedia (Rp)', unit: 'currency', placeholder: '5000000' },
       { key: 'roas_iklan', label: 'ROAS Iklan', unit: 'number', placeholder: '3.2' },
       { key: 'rating_toko', label: 'Rating Toko Rata-rata', unit: 'number', placeholder: '4.8' },
       { key: 'campaign_aktif', label: 'Campaign Aktif (jumlah)', unit: 'number', placeholder: '5' },

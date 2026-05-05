@@ -67,7 +67,6 @@ enum KpiAggregation {
 enum KpiPlatform {
   shopee
   tiktok
-  tokopedia
 }
 
 model User {

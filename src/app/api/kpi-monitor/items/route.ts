@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
               is_enabled: false,
             })),
           });
-          
+
           configs = await prisma.kpiBrandConfig.findMany({
             where: { brand_id },
             include: { kpi_item: true },
@@ -127,10 +127,10 @@ export async function PUT(req: NextRequest) {
   // Update master KPI
   const updatedKpi = await prisma.kpiItem.update({
     where: { id },
-    data: { 
-      name, 
-      category, 
-      unit, 
+    data: {
+      name,
+      category,
+      unit,
       description,
       auto_source_role: category === 'auto_daily_log' ? auto_source_role : null,
       auto_source: category === 'auto_daily_log' ? `custom_${id}` : null,
@@ -144,4 +144,31 @@ export async function PUT(req: NextRequest) {
   });
 
   return NextResponse.json(updatedKpi);
+}
+
+export async function DELETE(req: NextRequest) {
+  const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
+  if (!session.user || !['owner', 'admin'].includes(session.user.role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const { searchParams } = new URL(req.url);
+  const id = searchParams.get('id');
+
+  if (!id) {
+    return NextResponse.json({ error: 'Missing KPI item id' }, { status: 400 });
+  }
+
+  // Delete related records first
+  await prisma.kpiDailySnapshot.deleteMany({ where: { kpi_item_id: id } });
+  await prisma.kpiWeeklyTarget.deleteMany({ where: { kpi_item_id: id } });
+  await prisma.kpiBrandConfig.deleteMany({ where: { kpi_item_id: id } });
+
+  // Soft-delete: mark as inactive (or hard delete if preferred)
+  await prisma.kpiItem.update({
+    where: { id },
+    data: { is_active: false },
+  });
+
+  return NextResponse.json({ success: true, message: 'KPI item berhasil dihapus' });
 }

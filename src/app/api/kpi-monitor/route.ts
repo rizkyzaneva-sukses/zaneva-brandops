@@ -69,15 +69,13 @@ export async function GET(req: NextRequest) {
 
     if (actualValue === null) {
       if (kpi.category === 'auto_sum') {
-        // Sum specific KPIs
-        const shopee = kpiConfigs.find((c) => c.kpi_item.auto_source === 'omzet_shopee');
-        const tiktok = kpiConfigs.find((c) => c.kpi_item.auto_source === 'omzet_tiktok');
-        const tokopedia = kpiConfigs.find((c) => c.kpi_item.auto_source === 'omzet_tokopedia');
-
-        const sumKpis = [shopee, tiktok, tokopedia].filter(Boolean);
+        // Sum all enabled auto_daily_log KPIs with currency unit whose name starts with "Omzet" or "Omset"
+        const sumKpis = kpiConfigs.filter(
+          (c) => c.kpi_item.category === 'auto_daily_log' && c.kpi_item.unit === 'currency' && c.is_enabled
+            && /^om[sz]et/i.test(c.kpi_name)
+        );
         let total = 0;
         for (const sk of sumKpis) {
-          if (!sk) continue;
           const val = aggregateKpi(
             standups.map((s) => ({ ...s, standup_date: s.standup_date.toISOString().split('T')[0], daily_log: s.daily_log as Record<string, unknown> })),
             sk.kpi_item,
