@@ -5,7 +5,7 @@ import { ROLE_LABELS, ROLE_CLASS } from '@/lib/utils';
 
 interface Brand { id: string; name: string; description: string; status: string; }
 interface User { id: string; email: string; full_name: string; role: string; brand_id: string | null; brand_name: string | null; is_active: boolean; }
-interface KpiConfig { kpi_item_id: string; kpi_name: string; is_enabled: boolean; kpi_item: { unit: string; category: string; description: string | null; auto_source_role?: string | null }; }
+interface KpiConfig { kpi_item_id: string; kpi_name: string; is_enabled: boolean; kpi_item: { unit: string; category: string; description: string | null; auto_source_role?: string | null; order_num: number }; }
 interface ImportSummary {
   source_file: string;
   imported_user_emails: string[];
@@ -40,6 +40,8 @@ export default function PengaturanPage() {
   const [kpiForm, setKpiForm] = useState({ name: '', category: 'manual', unit: 'currency', description: '', auto_source_role: '' });
   const [editKpiId, setEditKpiId] = useState<string | null>(null);
   const [showKpiModal, setShowKpiModal] = useState(false);
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
@@ -183,6 +185,47 @@ export default function PengaturanPage() {
       const d = await res.json();
       showToast(`❌ ${d.error || 'Gagal menghapus KPI'}`);
     }
+  }
+
+  async function handleMoveKpi(fromIndex: number, toIndex: number) {
+    if (toIndex < 0 || toIndex >= kpiConfigs.length) return;
+    const newConfigs = [...kpiConfigs];
+    const [moved] = newConfigs.splice(fromIndex, 1);
+    newConfigs.splice(toIndex, 0, moved);
+    setKpiConfigs(newConfigs);
+
+    // Save new order to backend
+    const items = newConfigs.map((c, idx) => ({ id: c.kpi_item_id, order_num: idx + 1 }));
+    const res = await fetch('/api/kpi-monitor/items/reorder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items }),
+    });
+    if (res.ok) {
+      showToast('✅ Urutan KPI berhasil diperbarui');
+    } else {
+      showToast('❌ Gagal menyimpan urutan');
+      // Revert on failure
+      fetch(`/api/kpi-monitor/items?brand_id=${selectedBrandForKpi}`)
+        .then(r => r.json()).then(setKpiConfigs);
+    }
+  }
+
+  function handleDragStart(idx: number) {
+    setDragIdx(idx);
+  }
+
+  function handleDragOver(e: any, idx: number) {
+    e.preventDefault();
+    setDragOverIdx(idx);
+  }
+
+  function handleDragEnd() {
+    if (dragIdx !== null && dragOverIdx !== null && dragIdx !== dragOverIdx) {
+      handleMoveKpi(dragIdx, dragOverIdx);
+    }
+    setDragIdx(null);
+    setDragOverIdx(null);
   }
 
   async function handleResetPassword() {
@@ -535,17 +578,49 @@ export default function PengaturanPage() {
 
           {selectedBrandForKpi && (
             <div className="card">
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>Toggle KPI yang ingin dimonitor untuk brand ini. KPI yang dinonaktifkan tidak akan muncul di Monitor KPI dan Weekly Report.</p>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>Toggle KPI yang ingin dimonitor untuk brand ini. Drag atau gunakan tombol ↑↓ untuk mengatur urutan tampilan KPI.</p>
               <table className="table">
-                <thead><tr><th>KPI</th><th>Unit</th><th>Tipe</th><th>Deskripsi</th><th>Aktif</th></tr></thead>
+                <thead><tr><th style={{ width: 60 }}>Urutan</th><th>KPI</th><th>Unit</th><th>Tipe</th><th>Aktif</th><th>Aksi</th></tr></thead>
                 <tbody>
-                  {kpiConfigs.map(c => (
-                    <tr key={c.kpi_item_id}>
-                      <td style={{ fontWeight: 500 }}>{c.kpi_name}</td>
+                  {kpiConfigs.map((c, idx) => (
+                    <tr
+                      key={c.kpi_item_id}
+                      draggable
+                      onDragStart={() => handleDragStart(idx)}
+                      onDragOver={(e) => handleDragOver(e, idx)}
+                      onDragEnd={handleDragEnd}
+                      style={{
+                        cursor: 'grab',
+                        opacity: dragIdx === idx ? 0.5 : 1,
+                        background: dragOverIdx === idx ? 'rgba(212,175,55,0.1)' : undefined,
+                        borderLeft: dragOverIdx === idx ? '3px solid var(--gold)' : '3px solid transparent',
+                        transition: 'background 0.15s, border-left 0.15s',
+                      }}
+                    >
+                      <td style={{ textAlign: 'center' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                          <button
+                            onClick={() => handleMoveKpi(idx, idx - 1)}
+                            disabled={idx === 0}
+                            style={{ background: 'none', border: 'none', cursor: idx === 0 ? 'not-allowed' : 'pointer', color: idx === 0 ? 'var(--border)' : 'var(--text-secondary)', fontSize: 14, padding: '2px 6px', borderRadius: 4, lineHeight: 1 }}
+                            title="Pindah ke atas"
+                          >▲</button>
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, userSelect: 'none' }}>☰</span>
+                          <button
+                            onClick={() => handleMoveKpi(idx, idx + 1)}
+                            disabled={idx === kpiConfigs.length - 1}
+                            style={{ background: 'none', border: 'none', cursor: idx === kpiConfigs.length - 1 ? 'not-allowed' : 'pointer', color: idx === kpiConfigs.length - 1 ? 'var(--border)' : 'var(--text-secondary)', fontSize: 14, padding: '2px 6px', borderRadius: 4, lineHeight: 1 }}
+                            title="Pindah ke bawah"
+                          >▼</button>
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ fontWeight: 500 }}>{c.kpi_name}</div>
+                        {c.kpi_item.description && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{c.kpi_item.description}</div>}
+                      </td>
                       <td style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'capitalize' }}>{c.kpi_item.unit}</td>
                       <td style={{ fontSize: 12, color: 'var(--text-muted)', textTransform: 'capitalize' }}>{c.kpi_item.category.replace('_', ' ')}</td>
-                      <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{c.kpi_item.description || '—'}</td>
-                      <td style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <td>
                         <button
                           onClick={() => handleToggleKpi(c.kpi_item_id, c.is_enabled)}
                           style={{
@@ -556,8 +631,12 @@ export default function PengaturanPage() {
                         >
                           <div style={{ position: 'absolute', top: 3, left: c.is_enabled ? 23 : 3, width: 18, height: 18, borderRadius: '50%', background: 'white', transition: 'left 0.2s' }} />
                         </button>
-                        <button className="btn btn-ghost btn-sm" onClick={() => openEditKpiModal(c)} style={{ padding: '4px 8px', fontSize: 12 }}>Edit</button>
-                        <button className="btn btn-ghost btn-sm" onClick={() => handleDeleteKpi(c.kpi_item_id, c.kpi_name)} style={{ padding: '4px 8px', fontSize: 12, color: '#EF4444' }}>Hapus</button>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <button className="btn btn-ghost btn-sm" onClick={() => openEditKpiModal(c)} style={{ padding: '4px 8px', fontSize: 12 }}>Edit</button>
+                          <button className="btn btn-ghost btn-sm" onClick={() => handleDeleteKpi(c.kpi_item_id, c.kpi_name)} style={{ padding: '4px 8px', fontSize: 12, color: '#EF4444' }}>Hapus</button>
+                        </div>
                       </td>
                     </tr>
                   ))}
