@@ -81,6 +81,16 @@ export default function WeeklyReportPage() {
       };
     });
 
+    // Calculate auto_sum KPIs (e.g., Total GMV = sum of all Omzet KPIs)
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
+      if (entry.category === 'auto_sum') {
+        const omzetKpis = entries.filter(e => e.category === 'auto_daily_log' && e.unit === 'currency' && /^om[sz]et/i.test(e.kpi_name));
+        const total = omzetKpis.reduce((sum, k) => sum + parseFloat(k.actual || '0'), 0);
+        entries[i] = { ...entry, actual: String(total), pct: calcPct(total, parseFloat(entry.target || '0')), is_auto: true };
+      }
+    }
+
     setKpiData(entries);
   }
 
@@ -191,9 +201,21 @@ export default function WeeklyReportPage() {
                             type="number"
                             value={kpi.actual}
                             style={{ maxWidth: 120 }}
+                            readOnly={kpi.category === 'auto_sum'}
                             onChange={e => {
+                              if (kpi.category === 'auto_sum') return;
                               const newKpis = [...kpiData];
                               newKpis[i] = { ...kpi, actual: e.target.value, pct: calcPct(parseFloat(e.target.value || '0'), parseFloat(kpi.target || '0')), is_overridden: kpi.is_auto };
+                              // Recalculate auto_sum KPIs if this is an Omzet field
+                              if (kpi.category === 'auto_daily_log' && kpi.unit === 'currency' && /^om[sz]et/i.test(kpi.kpi_name)) {
+                                for (let j = 0; j < newKpis.length; j++) {
+                                  if (newKpis[j].category === 'auto_sum') {
+                                    const omzetKpis = newKpis.filter(e => e.category === 'auto_daily_log' && e.unit === 'currency' && /^om[sz]et/i.test(e.kpi_name));
+                                    const total = omzetKpis.reduce((sum, k) => sum + parseFloat(k.actual || '0'), 0);
+                                    newKpis[j] = { ...newKpis[j], actual: String(total), pct: calcPct(total, parseFloat(newKpis[j].target || '0')) };
+                                  }
+                                }
+                              }
                               setKpiData(newKpis);
                             }}
                           />
