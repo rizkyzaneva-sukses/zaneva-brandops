@@ -46,7 +46,7 @@ export default function StandupPage() {
   const [kpiFeedback, setKpiFeedback] = useState<KpiFeedback[] | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
   const [recapOpen, setRecapOpen] = useState(false);
-  const [dynamicLogFields, setDynamicLogFields] = useState<any[]>([]);
+  const [dynamicLogFields, setDynamicLogFields] = useState<any[] | null>(null);
 
   // Use local date (YYYY-MM-DD) to match user's actual day
   const today = (() => {
@@ -98,15 +98,30 @@ export default function StandupPage() {
   }, [today, tab]);
 
   const fetchDynamicKpis = useCallback(async (brandId: string, role: string) => {
-    const res = await fetch(`/api/kpi-monitor/items?brand_id=${brandId}&enabled_only=true`);
-    if (res.ok) {
-      const data = await res.json();
-      const assigned = data.filter((c: any) => c.kpi_item.category === 'auto_daily_log' && c.kpi_item.auto_source_role === role);
-      setDynamicLogFields(assigned.map((c: any) => ({
-        key: c.kpi_item.auto_source || `custom_${c.kpi_item.id}`,
-        label: c.kpi_name,
-        unit: c.kpi_item.unit,
-      })));
+    try {
+      const res = await fetch(`/api/kpi-monitor/items?brand_id=${brandId}&enabled_only=true`);
+      if (res.ok) {
+        const data = await res.json();
+        // Filter KPIs assigned to this role (auto_daily_log type with matching auto_source_role)
+        // For brand_manager: also include KPIs where auto_source_role is null/empty (brand-level KPIs)
+        const assigned = data.filter((c: any) => {
+          if (c.kpi_item.category !== 'auto_daily_log') return false;
+          if (c.kpi_item.auto_source_role === role) return true;
+          // Brand manager sees all unassigned auto_daily_log KPIs
+          if (role === 'brand_manager' && !c.kpi_item.auto_source_role) return true;
+          return false;
+        });
+        setDynamicLogFields(assigned.map((c: any) => ({
+          key: c.kpi_item.auto_source || `custom_${c.kpi_item.id}`,
+          label: c.kpi_name,
+          unit: c.kpi_item.unit,
+          placeholder: c.kpi_item.unit === 'currency' ? '0' : c.kpi_item.unit === 'percent' ? '0' : '0',
+        })));
+      } else {
+        setDynamicLogFields([]);
+      }
+    } catch {
+      setDynamicLogFields([]);
     }
   }, []);
 
@@ -125,20 +140,34 @@ export default function StandupPage() {
   const isSubmitted = currentStandup?.status === 'submitted';
   const canEdit = user ? ['brand_manager', 'owner'].includes(user.role) : false;
   const sections = user ? getStandupQuestions(user.role, tab) : [];
-  let logConfig = user ? getDailyLogConfig(user.role) : null;
 
-  if (dynamicLogFields.length > 0) {
-    if (!logConfig) {
-      logConfig = { title: 'Daily KPI Log', columns: ['Metrik', 'Aktual', 'Catatan'], rows: [] };
-    }
-    // Append dynamic fields that are not already in logConfig
-    const existingKeys = new Set(logConfig.rows.map(r => r.key));
-    const newFields = dynamicLogFields.filter(f => !existingKeys.has(f.key));
+  // Daily Log Config: prioritize dynamic KPI fields from KPI Config (per role)
+  // Only fall back to hardcoded config if dynamic fetch hasn't completed yet (null)
+  let logConfig: ReturnType<typeof getDailyLogConfig> = null;
+
+  if (dynamicLogFields !== null && dynamicLogFields.length > 0) {
+    // Use dynamic fields from KPI Config — this is the primary source
+    const roleLabel = user?.role === 'brand_manager' ? 'Brand Manager'
+      : user?.role === 'admin_marketplace' ? 'Admin Marketplace'
+        : user?.role === 'public_relation' ? 'Public Relation'
+          : user?.role === 'creative' ? 'Creative'
+            : user?.role === 'rnd' ? 'R&D'
+              : user?.role || '';
     logConfig = {
-      ...logConfig,
-      rows: [...logConfig.rows, ...newFields]
+      title: `Daily KPI Log — ${roleLabel}`,
+      columns: ['Metrik', 'Aktual', 'Catatan'],
+      rows: dynamicLogFields.map(f => ({
+        key: f.key,
+        label: f.label + (f.unit === 'currency' ? ' (Rp)' : f.unit === 'percent' ? ' (%)' : ''),
+        unit: f.unit as 'currency' | 'number' | 'text' | 'status',
+        placeholder: f.placeholder || (f.unit === 'currency' ? '0' : '0'),
+      })),
     };
+  } else if (dynamicLogFields === null) {
+    // Still loading — use hardcoded config as temporary fallback
+    logConfig = user ? getDailyLogConfig(user.role) : null;
   }
+  // If dynamicLogFields is [] (empty array), it means no KPIs are assigned to this role — show nothing
 
   async function handleSave(status: 'draft' | 'submitted') {
     if (!user) return;

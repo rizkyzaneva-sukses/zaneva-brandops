@@ -132,9 +132,11 @@ export function aggregateKpi(
 ): number | null {
   const filtered = standups.filter((s) => {
     const dateStr = toDateOnly(s.standup_date);
+    // If auto_source_role is set, match it; if null/empty, default to brand_manager
+    const targetRole = kpiItem.auto_source_role || 'brand_manager';
     return (
       s.session === 'sore' &&
-      s.user_role === kpiItem.auto_source_role &&
+      s.user_role === targetRole &&
       dateStr >= weekStart &&
       dateStr <= weekEnd &&
       s.status === 'submitted'
