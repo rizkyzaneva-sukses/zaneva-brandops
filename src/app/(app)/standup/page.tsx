@@ -102,17 +102,23 @@ export default function StandupPage() {
       const res = await fetch(`/api/kpi-monitor/items?brand_id=${brandId}&enabled_only=true`);
       if (res.ok) {
         const data = await res.json();
-        // Filter KPIs assigned to this role (auto_daily_log type with matching auto_source_role)
-        // For brand_manager: also include KPIs where auto_source_role is null/empty (brand-level KPIs)
+        // Filter KPIs assigned to this role:
+        // 1. auto_daily_log KPIs with matching auto_source_role
+        // 2. manual KPIs with matching auto_source_role (assigned to role for daily input)
+        // For brand_manager: also include KPIs where auto_source_role is null/empty
         const assigned = data.filter((c: any) => {
-          if (c.kpi_item.category !== 'auto_daily_log') return false;
-          if (c.kpi_item.auto_source_role === role) return true;
-          // Brand manager sees all unassigned auto_daily_log KPIs
-          if (role === 'brand_manager' && !c.kpi_item.auto_source_role) return true;
+          const category = c.kpi_item.category;
+          const sourceRole = c.kpi_item.auto_source_role;
+          // auto_sum KPIs are never shown in daily log (they aggregate automatically)
+          if (category === 'auto_sum') return false;
+          // Match by role assignment
+          if (sourceRole === role) return true;
+          // Brand manager sees all unassigned KPIs (auto_daily_log or manual without role)
+          if (role === 'brand_manager' && !sourceRole && category !== 'auto_sum') return true;
           return false;
         });
         setDynamicLogFields(assigned.map((c: any) => ({
-          key: c.kpi_item.auto_source || `custom_${c.kpi_item.id}`,
+          key: c.kpi_item.auto_source || `custom_${c.kpi_item_id}`,
           label: c.kpi_name,
           unit: c.kpi_item.unit,
           placeholder: c.kpi_item.unit === 'currency' ? '0' : c.kpi_item.unit === 'percent' ? '0' : '0',

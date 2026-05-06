@@ -81,12 +81,41 @@ export default function WeeklyReportPage() {
       };
     });
 
-    // Calculate auto_sum KPIs (e.g., Total GMV = sum of all Omzet KPIs)
+    // Calculate auto_sum KPIs based on formula config stored in platform field
     for (let i = 0; i < entries.length; i++) {
       const entry = entries[i];
       if (entry.category === 'auto_sum') {
-        const omzetKpis = entries.filter(e => e.category === 'auto_daily_log' && e.unit === 'currency' && /^om[sz]et/i.test(e.kpi_name));
-        const total = omzetKpis.reduce((sum, k) => sum + parseFloat(k.actual || '0'), 0);
+        const config = configs.find((cfg: any) => cfg.kpi_item_id === entry.kpi_item_id);
+        let formulaConfig: { formula?: string; kpi_names?: string } = { formula: 'all_currency' };
+        try {
+          if (config?.kpi_item?.platform) formulaConfig = JSON.parse(config.kpi_item.platform);
+        } catch { }
+
+        let sourceKpis: typeof entries = [];
+        const formula = formulaConfig.formula || 'all_currency';
+
+        if (formula === 'all_currency') {
+          sourceKpis = entries.filter(e => e.category === 'auto_daily_log' && e.unit === 'currency');
+        } else if (formula === 'all_number') {
+          sourceKpis = entries.filter(e => e.category === 'auto_daily_log' && e.unit === 'number');
+        } else if (formula === 'by_role') {
+          const targetRole = config?.kpi_item?.auto_source_role || '';
+          sourceKpis = entries.filter(e => e.category === 'auto_daily_log');
+          // Filter by role: check if the source config matches
+          if (targetRole) {
+            const roleConfigs = configs.filter((cfg: any) => cfg.kpi_item?.auto_source_role === targetRole && cfg.kpi_item?.category === 'auto_daily_log');
+            const roleKpiIds = new Set(roleConfigs.map((cfg: any) => cfg.kpi_item_id));
+            sourceKpis = entries.filter(e => roleKpiIds.has(e.kpi_item_id));
+          }
+        } else if (formula === 'custom') {
+          const kpiNames = (formulaConfig.kpi_names || '').split(',').map((n: string) => n.trim().toLowerCase()).filter(Boolean);
+          sourceKpis = entries.filter(e => kpiNames.includes(e.kpi_name.toLowerCase()));
+        } else {
+          // Fallback: all currency auto_daily_log
+          sourceKpis = entries.filter(e => e.category === 'auto_daily_log' && e.unit === 'currency');
+        }
+
+        const total = sourceKpis.reduce((sum, k) => sum + parseFloat(k.actual || '0'), 0);
         entries[i] = { ...entry, actual: String(total), pct: calcPct(total, parseFloat(entry.target || '0')), is_auto: true };
       }
     }
@@ -206,14 +235,13 @@ export default function WeeklyReportPage() {
                               if (kpi.category === 'auto_sum') return;
                               const newKpis = [...kpiData];
                               newKpis[i] = { ...kpi, actual: e.target.value, pct: calcPct(parseFloat(e.target.value || '0'), parseFloat(kpi.target || '0')), is_overridden: kpi.is_auto };
-                              // Recalculate auto_sum KPIs if this is an Omzet field
-                              if (kpi.category === 'auto_daily_log' && kpi.unit === 'currency' && /^om[sz]et/i.test(kpi.kpi_name)) {
-                                for (let j = 0; j < newKpis.length; j++) {
-                                  if (newKpis[j].category === 'auto_sum') {
-                                    const omzetKpis = newKpis.filter(e => e.category === 'auto_daily_log' && e.unit === 'currency' && /^om[sz]et/i.test(e.kpi_name));
-                                    const total = omzetKpis.reduce((sum, k) => sum + parseFloat(k.actual || '0'), 0);
-                                    newKpis[j] = { ...newKpis[j], actual: String(total), pct: calcPct(total, parseFloat(newKpis[j].target || '0')) };
-                                  }
+                              // Recalculate all auto_sum KPIs whenever any value changes
+                              for (let j = 0; j < newKpis.length; j++) {
+                                if (newKpis[j].category === 'auto_sum') {
+                                  // Simple recalc: sum all non-auto_sum entries that are auto_daily_log with currency
+                                  const sourceKpis = newKpis.filter(ek => ek.category === 'auto_daily_log' && ek.unit === 'currency');
+                                  const total = sourceKpis.reduce((sum, k) => sum + parseFloat(k.actual || '0'), 0);
+                                  newKpis[j] = { ...newKpis[j], actual: String(total), pct: calcPct(total, parseFloat(newKpis[j].target || '0')) };
                                 }
                               }
                               setKpiData(newKpis);

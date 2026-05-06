@@ -1,35 +1,116 @@
-import { startOfWeek, addDays, getISOWeek, format, differenceInDays, parseISO, startOfMonth, endOfMonth } from 'date-fns';
+import { format, differenceInDays, parseISO, getDaysInMonth } from 'date-fns';
 import { id } from 'date-fns/locale';
 
 // ─── DATE UTILS ───────────────────────────────────────────────────────────────
 
-export function getCurrentWeek(date: Date = new Date()) {
-  const monday = startOfWeek(date, { weekStartsOn: 1 });
-  const sunday = addDays(monday, 6);
-  const weekNum = getISOWeek(monday);
-  const monthAbbr = format(monday, 'MMM yyyy', { locale: id });
+// Period concept:
+// Period 1: Day 1-7
+// Period 2: Day 8-14
+// Period 3: Day 15-21
+// Period 4: Day 22-end of month (28/29/30/31)
+// Week numbering starts from W1 = Jan 1-7, 2026
+
+const EPOCH_YEAR = 2026;
+const EPOCH_MONTH = 0; // January (0-indexed)
+
+function getPeriodForDate(date: Date): { period: number; periodStart: Date; periodEnd: Date; monthDate: Date } {
+  const day = date.getDate();
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const lastDay = getDaysInMonth(date);
+
+  let period: number;
+  let startDay: number;
+  let endDay: number;
+
+  if (day <= 7) {
+    period = 1; startDay = 1; endDay = 7;
+  } else if (day <= 14) {
+    period = 2; startDay = 8; endDay = 14;
+  } else if (day <= 21) {
+    period = 3; startDay = 15; endDay = 21;
+  } else {
+    period = 4; startDay = 22; endDay = lastDay;
+  }
 
   return {
-    week_start: format(monday, 'yyyy-MM-dd'),
-    week_end: format(sunday, 'yyyy-MM-dd'),
-    week_start_date: monday,
-    week_end_date: sunday,
-    week_label: `W${weekNum} - ${monthAbbr}`,
-    days_elapsed: differenceInDays(date, monday) + 1,
-    total_days: 5,
+    period,
+    periodStart: new Date(year, month, startDay),
+    periodEnd: new Date(year, month, endDay),
+    monthDate: new Date(year, month, 1),
+  };
+}
+
+function getWeekNumber(date: Date): number {
+  // Calculate week number from epoch (Jan 1, 2026)
+  // Each month has exactly 4 periods
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const { period } = getPeriodForDate(date);
+
+  // Months elapsed since epoch
+  const monthsFromEpoch = (year - EPOCH_YEAR) * 12 + (month - EPOCH_MONTH);
+  // Week number = monthsFromEpoch * 4 + period
+  return monthsFromEpoch * 4 + period;
+}
+
+export function getCurrentWeek(date: Date = new Date()) {
+  const { period, periodStart, periodEnd, monthDate } = getPeriodForDate(date);
+  const weekNum = getWeekNumber(date);
+  const monthAbbr = format(monthDate, 'MMM yyyy', { locale: id });
+
+  return {
+    week_start: format(periodStart, 'yyyy-MM-dd'),
+    week_end: format(periodEnd, 'yyyy-MM-dd'),
+    week_start_date: periodStart,
+    week_end_date: periodEnd,
+    week_label: `W${weekNum} \u2013 ${monthAbbr}`,
+    days_elapsed: differenceInDays(date, periodStart) + 1,
+    total_days: differenceInDays(periodEnd, periodStart) + 1,
+    period,
   };
 }
 
 export function getWeekOptions(monthsBack = 2) {
   const weeks: { week_label: string; week_start: string; week_end: string }[] = [];
   const today = new Date();
+  const currentMonth = today.getMonth();
+  const currentYear = today.getFullYear();
 
-  for (let i = 0; i < monthsBack * 5; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - i * 7);
-    const w = getCurrentWeek(d);
-    if (!weeks.find((x) => x.week_label === w.week_label)) {
-      weeks.push({ week_label: w.week_label, week_start: w.week_start, week_end: w.week_end });
+  // Generate periods from current month going back
+  for (let i = 0; i < monthsBack; i++) {
+    const targetMonth = currentMonth - i;
+    const y = currentYear + Math.floor(targetMonth / 12);
+    const adjustedMonth = ((targetMonth % 12) + 12) % 12;
+    const monthDate = new Date(y, adjustedMonth, 1);
+    const lastDay = getDaysInMonth(monthDate);
+
+    // 4 periods per month, in reverse order (newest first)
+    const periods = [
+      { p: 4, start: 22, end: lastDay },
+      { p: 3, start: 15, end: 21 },
+      { p: 2, start: 8, end: 14 },
+      { p: 1, start: 1, end: 7 },
+    ];
+
+    for (const pd of periods) {
+      const periodStart = new Date(y, adjustedMonth, pd.start);
+      const periodEnd = new Date(y, adjustedMonth, pd.end);
+
+      // Skip future periods
+      if (periodStart > today) continue;
+
+      const weekNum = getWeekNumber(periodStart);
+      const monthAbbr = format(monthDate, 'MMM yyyy', { locale: id });
+      const label = `W${weekNum} \u2013 ${monthAbbr}`;
+
+      if (!weeks.find(w => w.week_label === label)) {
+        weeks.push({
+          week_label: label,
+          week_start: format(periodStart, 'yyyy-MM-dd'),
+          week_end: format(periodEnd, 'yyyy-MM-dd'),
+        });
+      }
     }
   }
 
@@ -48,7 +129,37 @@ export function getMonthOptions(monthsBack = 6) {
     });
   }
 
+  // Sort chronologically (oldest first = ascending)
+  months.sort((a, b) => a.month_year.localeCompare(b.month_year));
+
   return months;
+}
+
+// Get all 4 period week_labels for a given month (for monthly aggregation)
+export function getPeriodsForMonth(monthYear: string): { week_label: string; week_start: string; week_end: string }[] {
+  const [yearStr, monthStr] = monthYear.split('-');
+  const year = parseInt(yearStr);
+  const month = parseInt(monthStr) - 1; // 0-indexed
+  const monthDate = new Date(year, month, 1);
+  const lastDay = getDaysInMonth(monthDate);
+  const monthAbbr = format(monthDate, 'MMM yyyy', { locale: id });
+
+  const periods = [
+    { start: 1, end: 7 },
+    { start: 8, end: 14 },
+    { start: 15, end: 21 },
+    { start: 22, end: lastDay },
+  ];
+
+  return periods.map((pd) => {
+    const periodStart = new Date(year, month, pd.start);
+    const weekNum = getWeekNumber(periodStart);
+    return {
+      week_label: `W${weekNum} \u2013 ${monthAbbr}`,
+      week_start: format(periodStart, 'yyyy-MM-dd'),
+      week_end: format(new Date(year, month, pd.end), 'yyyy-MM-dd'),
+    };
+  });
 }
 
 export function formatDateID(date: Date | string) {

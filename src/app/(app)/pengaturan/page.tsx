@@ -37,7 +37,7 @@ export default function PengaturanPage() {
   const [showUserModal, setShowUserModal] = useState(false);
   const [brandForm, setBrandForm] = useState({ name: '', description: '', status: 'active' });
   const [userForm, setUserForm] = useState({ email: '', full_name: '', role: 'creative', brand_id: '', password: 'zaneva123' });
-  const [kpiForm, setKpiForm] = useState({ name: '', category: 'manual', unit: 'currency', description: '', auto_source_role: '' });
+  const [kpiForm, setKpiForm] = useState<{ name: string; category: string; unit: string; description: string; auto_source_role: string; auto_sum_formula?: string; auto_sum_kpi_names?: string }>({ name: '', category: 'manual', unit: 'currency', description: '', auto_source_role: '', auto_sum_formula: 'all_currency', auto_sum_kpi_names: '' });
   const [editKpiId, setEditKpiId] = useState<string | null>(null);
   const [showKpiModal, setShowKpiModal] = useState(false);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
@@ -138,15 +138,25 @@ export default function PengaturanPage() {
   async function handleSaveKpi() {
     setSaving(true);
     const isEdit = !!editKpiId;
+    const payload = {
+      ...(isEdit ? { id: editKpiId } : {}),
+      name: kpiForm.name,
+      category: kpiForm.category,
+      unit: kpiForm.unit,
+      description: kpiForm.description,
+      auto_source_role: kpiForm.auto_source_role,
+      auto_sum_formula: kpiForm.auto_sum_formula,
+      auto_sum_kpi_names: kpiForm.auto_sum_kpi_names,
+    };
     const res = await fetch('/api/kpi-monitor/items', {
       method: isEdit ? 'PUT' : 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(isEdit ? { id: editKpiId, ...kpiForm } : kpiForm),
+      body: JSON.stringify(payload),
     });
     setSaving(false);
     if (res.ok) {
       showToast(`✅ Master KPI berhasil ${isEdit ? 'diperbarui' : 'ditambahkan'}`);
-      setKpiForm({ name: '', category: 'manual', unit: 'currency', description: '', auto_source_role: '' });
+      setKpiForm({ name: '', category: 'manual', unit: 'currency', description: '', auto_source_role: '', auto_sum_formula: 'all_currency', auto_sum_kpi_names: '' });
       setEditKpiId(null);
       setShowKpiModal(false);
       // Refresh current brand KPI configs if a brand is selected so it auto-syncs
@@ -573,7 +583,7 @@ export default function PengaturanPage() {
                 </select>
               </div>
             </div>
-            <button className="btn btn-primary" onClick={() => { setEditKpiId(null); setKpiForm({ name: '', category: 'manual', unit: 'currency', description: '', auto_source_role: '' }); setShowKpiModal(true); }}>+ Tambah Master KPI</button>
+            <button className="btn btn-primary" onClick={() => { setEditKpiId(null); setKpiForm({ name: '', category: 'manual', unit: 'currency', description: '', auto_source_role: '', auto_sum_formula: 'all_currency', auto_sum_kpi_names: '' }); setShowKpiModal(true); }}>+ Tambah Master KPI</button>
           </div>
 
           {selectedBrandForKpi && (
@@ -674,20 +684,54 @@ export default function PengaturanPage() {
 
                 {kpiForm.category === 'auto_sum' && (
                   <div style={{ padding: '10px 12px', background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: 8, fontSize: 12, color: 'var(--text-secondary)' }}>
-                    💡 KPI bertipe <b>Auto Sum</b> akan otomatis menjumlahkan semua KPI bertipe &quot;Auto Daily Log&quot; yang bersatuan <b>Currency</b> dan aktif untuk brand ini. Contoh: Total GMV = Omzet Shopee + Omzet TikTok + Omzet Lainnya.
+                    💡 KPI bertipe <b>Auto Sum</b> akan otomatis menjumlahkan KPI dari Daily Log Sore yang di-assign ke tim. Anda bisa memilih rumus spesifik di bawah.
                   </div>
                 )}
 
-                {kpiForm.category === 'auto_daily_log' && (
+                {kpiForm.category === 'auto_sum' && (
                   <div>
-                    <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Ditugaskan ke (Role) *</label>
-                    <select className="input" value={kpiForm.auto_source_role} onChange={e => setKpiForm(p => ({ ...p, auto_source_role: e.target.value }))}>
-                      <option value="">— Pilih Role yang mengisi harian —</option>
-                      {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                    <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Rumus Agregasi</label>
+                    <select className="input" value={kpiForm.auto_sum_formula || 'all_currency'} onChange={e => setKpiForm(p => ({ ...p, auto_sum_formula: e.target.value }))}>
+                      <option value="all_currency">Semua KPI Auto Daily Log bersatuan Currency</option>
+                      <option value="all_number">Semua KPI Auto Daily Log bersatuan Number</option>
+                      <option value="by_role">Semua KPI Auto Daily Log dari Role tertentu</option>
+                      <option value="custom">Pilih KPI spesifik (custom)</option>
                     </select>
-                    <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Role ini yang akan melihat kolom inputan KPI ini di form Sprint Sore mereka.</p>
+                    <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Tentukan sumber data yang akan dijumlahkan secara otomatis.</p>
                   </div>
                 )}
+
+                {kpiForm.category === 'auto_sum' && (kpiForm.auto_sum_formula === 'by_role' || kpiForm.auto_sum_formula === 'custom') && (
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>
+                      {kpiForm.auto_sum_formula === 'by_role' ? 'Filter berdasarkan Role' : 'Pilih KPI yang dijumlahkan'}
+                    </label>
+                    {kpiForm.auto_sum_formula === 'by_role' && (
+                      <select className="input" value={kpiForm.auto_source_role} onChange={e => setKpiForm(p => ({ ...p, auto_source_role: e.target.value }))}>
+                        <option value="">— Pilih Role —</option>
+                        {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                      </select>
+                    )}
+                    {kpiForm.auto_sum_formula === 'custom' && (
+                      <input className="input" value={kpiForm.auto_sum_kpi_names || ''} onChange={e => setKpiForm(p => ({ ...p, auto_sum_kpi_names: e.target.value }))} placeholder="Nama KPI dipisah koma, e.g. Omzet Shopee, Omzet TikTok" />
+                    )}
+                  </div>
+                )}
+
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Ditugaskan ke (Role) *</label>
+                  <select className="input" value={kpiForm.auto_source_role} onChange={e => setKpiForm(p => ({ ...p, auto_source_role: e.target.value }))}>
+                    <option value="">— Pilih Role —</option>
+                    {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                  </select>
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                    {kpiForm.category === 'auto_daily_log'
+                      ? 'Role ini yang akan melihat kolom inputan KPI ini di form Sprint Sore mereka.'
+                      : kpiForm.category === 'auto_sum'
+                        ? 'Role yang bertanggung jawab atas KPI agregasi ini.'
+                        : 'Role yang bertanggung jawab mengisi KPI ini di Sprint Sore.'}
+                  </p>
+                </div>
 
                 <div>
                   <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Deskripsi</label>

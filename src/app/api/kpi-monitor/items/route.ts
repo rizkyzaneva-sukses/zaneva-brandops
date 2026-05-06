@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const { name, category, unit, description, auto_source_role } = await req.json();
+  const { name, category, unit, description, auto_source_role, auto_sum_formula, auto_sum_kpi_names } = await req.json();
 
   if (!name || !category || !unit) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -94,6 +94,12 @@ export async function POST(req: NextRequest) {
 
   const id = crypto.randomUUID();
 
+  // Store auto_sum config in platform field as JSON
+  let platformData: string | null = null;
+  if (category === 'auto_sum') {
+    platformData = JSON.stringify({ formula: auto_sum_formula || 'all_currency', kpi_names: auto_sum_kpi_names || '' });
+  }
+
   const newKpi = await prisma.kpiItem.create({
     data: {
       id,
@@ -104,8 +110,9 @@ export async function POST(req: NextRequest) {
       order_num,
       is_active: true,
       auto_aggregation: 'sum',
-      auto_source_role: category === 'auto_daily_log' ? auto_source_role : null,
+      auto_source_role: auto_source_role || null,
       auto_source: category === 'auto_daily_log' ? `custom_${id}` : null,
+      platform: platformData,
     },
   });
 
@@ -118,10 +125,16 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const { id, name, category, unit, description, auto_source_role } = await req.json();
+  const { id, name, category, unit, description, auto_source_role, auto_sum_formula, auto_sum_kpi_names } = await req.json();
 
   if (!id || !name || !category || !unit) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+  }
+
+  // Store auto_sum config in platform field as JSON
+  let platformData: string | null = null;
+  if (category === 'auto_sum') {
+    platformData = JSON.stringify({ formula: auto_sum_formula || 'all_currency', kpi_names: auto_sum_kpi_names || '' });
   }
 
   // Update master KPI
@@ -132,8 +145,9 @@ export async function PUT(req: NextRequest) {
       category,
       unit,
       description,
-      auto_source_role: category === 'auto_daily_log' ? auto_source_role : null,
+      auto_source_role: auto_source_role || null,
       auto_source: category === 'auto_daily_log' ? `custom_${id}` : null,
+      platform: platformData,
     },
   });
 

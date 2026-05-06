@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getMonthOptions, getWeekOptions, formatNum, calcPct, getKpiStatusClass } from '@/lib/utils';
+import { getMonthOptions, getPeriodsForMonth, formatNum, calcPct, getKpiStatusClass } from '@/lib/utils';
 
 interface MonthlyReport { id: string; brand_id: string; brand_name: string; month_label: string; month_year: string; status: string; scorecard: ScorecardEntry[]; keberhasilan: string; kegagalan: string; insight_kompetitor: string; rencana_strategis: string; submitted_by: string; }
 interface ScorecardEntry { kpi_name: string; unit: string; actual_monthly: number; target_monthly: number; pct: number; score: number; }
@@ -20,7 +20,6 @@ export default function MonthlyReportPage() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
   const monthOptions = getMonthOptions(6);
-  const weekOptions = getWeekOptions(3);
 
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.json()).then(d => { setUser(d.user); if (d.user?.brand_id) setSelectedBrand(d.user.brand_id); });
@@ -30,20 +29,20 @@ export default function MonthlyReportPage() {
 
   async function loadMonthData() {
     if (!selectedBrand || !selectedMonth) return;
-    // Get all weeks in this month from weekOptions
-    const monthWeeks = weekOptions.filter(w => w.week_start.startsWith(selectedMonth));
-    if (monthWeeks.length === 0) {
-      alert('Tidak ada data weekly report untuk bulan ini di sistem');
-      return;
-    }
 
-    // Fetch weekly reports for this brand in this month
+    // Fetch weekly reports for this brand
     const weeklyRes = await fetch(`/api/weekly-reports?brand_id=${selectedBrand}`);
     const weeklyReports = await weeklyRes.json();
 
-    const monthReports = weeklyReports.filter((r: { week_start: string; status: string }) =>
-      r.week_start?.startsWith(selectedMonth) && r.status === 'submitted'
-    );
+    // Get the 4 fixed periods for this month (1-7, 8-14, 15-21, 22-end)
+    const periods = getPeriodsForMonth(selectedMonth);
+    const periodStarts = periods.map(p => p.week_start); // e.g. ['2026-05-01','2026-05-08','2026-05-15','2026-05-22']
+
+    // Filter reports that match any of the 4 period start dates for this month
+    const monthReports = weeklyReports.filter((r: { week_start: string; status: string }) => {
+      const weekStart = r.week_start ? r.week_start.substring(0, 10) : '';
+      return periodStarts.includes(weekStart) && r.status === 'submitted';
+    });
 
     if (monthReports.length === 0) {
       alert('Tidak ada weekly report yang disubmit untuk bulan ini');
