@@ -10,7 +10,7 @@ interface ExistingTarget { kpi_item_id: string; target_value: number; }
 
 export default function KpiTargetPage() {
   const week = getCurrentWeek();
-  const weekOptions = getWeekOptions(2);
+  const weekOptions = getWeekOptions(6);
 
   const [brands, setBrands] = useState<Brand[]>([]);
   const [selectedBrand, setSelectedBrand] = useState('');

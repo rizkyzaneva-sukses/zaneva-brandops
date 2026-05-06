@@ -42,7 +42,52 @@ if (fs.existsSync(envPath)) {
 }
 
 const { PrismaClient } = require('@prisma/client');
-const { parse } = require('csv-parse/sync');
+
+// Simple CSV parser (no external dependency needed)
+function parseCSV(content) {
+    const lines = content.split('\n').filter(l => l.trim());
+    if (lines.length === 0) return [];
+
+    const headers = parseCSVLine(lines[0]);
+    const rows = [];
+
+    for (let i = 1; i < lines.length; i++) {
+        const values = parseCSVLine(lines[i]);
+        if (values.length === 0) continue;
+        const row = {};
+        for (let j = 0; j < headers.length; j++) {
+            row[headers[j]] = (values[j] || '').trim();
+        }
+        rows.push(row);
+    }
+
+    return rows;
+}
+
+function parseCSVLine(line) {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+            if (inQuotes && line[i + 1] === '"') {
+                current += '"';
+                i++;
+            } else {
+                inQuotes = !inQuotes;
+            }
+        } else if (char === ',' && !inQuotes) {
+            result.push(current);
+            current = '';
+        } else {
+            current += char;
+        }
+    }
+    result.push(current);
+    return result;
+}
 
 const prisma = new PrismaClient();
 
@@ -213,8 +258,8 @@ async function main() {
     const targetsCsv = fs.readFileSync(targetsPath, 'utf8');
     const actualsCsv = fs.readFileSync(actualsPath, 'utf8');
 
-    const targetsRows = parse(targetsCsv, { columns: true, skip_empty_lines: true, trim: true });
-    const actualsRows = parse(actualsCsv, { columns: true, skip_empty_lines: true, trim: true });
+    const targetsRows = parseCSV(targetsCsv);
+    const actualsRows = parseCSV(actualsCsv);
 
     console.log(`Parsed ${targetsRows.length} target rows, ${actualsRows.length} actual rows`);
 

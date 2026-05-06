@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getCurrentWeek, formatNum, getKpiStatusClass, formatDateShort } from '@/lib/utils';
+import { getCurrentWeek, getWeekOptions, formatNum, getKpiStatusClass, formatDateShort } from '@/lib/utils';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 interface KpiData {
@@ -27,7 +27,9 @@ export default function KpiMonitorPage() {
   const [kpis, setKpis] = useState<KpiData[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasWeeklyReport, setHasWeeklyReport] = useState(false);
-  const week = getCurrentWeek();
+  const weekOptions = getWeekOptions(6);
+  const [selectedWeekLabel, setSelectedWeekLabel] = useState<string>(weekOptions[0]?.week_label || '');
+  const week = weekOptions.find(w => w.week_label === selectedWeekLabel) || getCurrentWeek();
 
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.json()).then(d => {
@@ -44,7 +46,7 @@ export default function KpiMonitorPage() {
       .then(r => r.json())
       .then(d => { setKpis(d.kpis || []); setHasWeeklyReport(d.has_weekly_report); setLoading(false); })
       .catch(() => setLoading(false));
-  }, [selectedBrand, week.week_label]);
+  }, [selectedBrand, selectedWeekLabel]);
 
   const isOwner = user && ['owner', 'admin'].includes(user.role);
 
@@ -77,6 +79,11 @@ export default function KpiMonitorPage() {
               {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           )}
+
+          {/* Week selector */}
+          <select className="input" style={{ width: 'auto' }} value={selectedWeekLabel} onChange={e => setSelectedWeekLabel(e.target.value)}>
+            {weekOptions.map(w => <option key={w.week_label} value={w.week_label}>{w.week_label}</option>)}
+          </select>
 
           {/* View toggle */}
           <div style={{ display: 'flex', gap: 4, background: 'var(--bg-surface)', padding: 3, borderRadius: 8, border: '1px solid var(--border)' }}>
