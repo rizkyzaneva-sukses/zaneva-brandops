@@ -9,8 +9,10 @@ const GUIDES: Record<string, { title: string; color: string; sections: { heading
     color: 'var(--gold)',
     sections: [
       { heading: 'Apa itu ZANEVA BrandOps?', content: 'BrandOps adalah sistem manajemen operasional brand harian. Setiap anggota tim mengisi Daily Sprint 2x sehari (pagi & sore) untuk mendokumentasikan progress, hambatan, dan pencapaian.' },
-      { heading: 'Alur Harian', content: '1. Pagi (sebelum mulai kerja): Isi Sprint Pagi — planning, hambatan, koordinasi\n2. Sore (akhir jam kerja): Isi Sprint Sore — review, pencapaian, daily log metrik\n3. Laporan Harian: Submit laporan khusus jika ada aktivitas penting\n4. Weekly Review: Brand Manager mengisi Weekly Report setiap Jumat' },
+      { heading: 'Alur Harian', content: '1. Pagi (sebelum mulai kerja): Isi Sprint Pagi — planning, hambatan, koordinasi\n2. Sore (akhir jam kerja): Isi Sprint Sore — review, pencapaian, daily log metrik\n3. Laporan Harian: Submit laporan khusus jika ada aktivitas penting\n4. Weekly Review: Brand Manager mengisi Weekly Report setiap Jumat\n5. Notifikasi Telegram: Sistem otomatis kirim ringkasan harian & weekly ke Telegram Group' },
       { heading: 'Tips Mengisi Sprint', content: '• Isi secara jujur dan spesifik\n• Gunakan angka aktual untuk daily log, bukan estimasi\n• Sebutkan blocking issue secara jelas agar bisa dieskalasi\n• Draft bisa disimpan dan dilengkapi nanti, tapi pastikan Submit sebelum jam kerja berakhir' },
+      { heading: 'Notifikasi Telegram', content: 'Sistem akan otomatis mengirim notifikasi ke Telegram Group + Topic:\n• Daily Summary (jam 17:30 WIB): Ringkasan siapa yang sudah/belum standup hari ini\n• Weekly Report (jam 18:00 WIB di hari Jumat): Rekap performa KPI per brand\n\nNotifikasi dikirim otomatis, Anda tidak perlu melakukan apa-apa. Cukup pastikan sprint diisi tepat waktu.' },
+      { heading: 'Format Periode Minggu', content: 'Setiap minggu ditampilkan dengan format: W18 [8 - 14 MEI 2026]\nArtinya: Minggu ke-18, periode tanggal 8 sampai 14 Mei 2026.\nPeriode dibagi 4 per bulan: 1-7, 8-14, 15-21, 22-akhir bulan.' },
     ],
   },
   creative: {
@@ -53,9 +55,11 @@ const GUIDES: Record<string, { title: string; color: string; sections: { heading
     title: '🎯 Panduan Brand Manager',
     color: '#F59E0B',
     sections: [
-      { heading: 'Tanggung Jawab BM', content: '• Monitor KPI brand secara real-time\n• Submit Daily Log metrik utama (Omzet, ROAS, Campaign)\n• Isi Weekly Report setiap Jumat\n• Review laporan harian tim\n• Koordinasi antara divisi' },
+      { heading: 'Tanggung Jawab BM', content: '• Monitor KPI brand secara real-time\n• Submit Daily Log metrik utama (Omzet, ROAS, Campaign)\n• Isi Weekly Report setiap Jumat\n• Review laporan harian tim\n• Koordinasi antara divisi\n• Pantau Trend KPI mingguan di tab Trend (Monitor KPI)' },
       { heading: 'Daily Log BM', content: 'Isi di Sprint Sore:\n• Omzet Shopee / TikTok / Tokopedia aktual hari ini\n• ROAS iklan\n• Rating toko rata-rata\n• Jumlah campaign aktif' },
       { heading: 'Weekly Report', content: 'Setiap akhir minggu:\n1. Buka menu Weekly Report\n2. Pilih brand & minggu\n3. Load data otomatis dari daily log\n4. Cek dan sesuaikan angka KPI\n5. Isi narasi: Highlights, Lowlights, Root Cause, Action Plan\n6. Submit' },
+      { heading: 'Trend KPI (Tab Trend)', content: 'Di halaman Monitor KPI, klik tab "📈 Trend" untuk melihat:\n• Grafik line chart pergerakan KPI 8 minggu terakhir\n• Tabel summary dengan indikator naik (↑) / turun (↓) / stabil (→)\n• Gunakan ini untuk identifikasi pola dan early warning jika KPI menurun' },
+      { heading: 'Kehadiran Tim (Tab Kehadiran)', content: 'Di halaman History Sprint, klik tab "📅 Kehadiran" untuk melihat:\n• Grid kehadiran per anggota tim (🌅 = pagi, 🌆 = sore, ⬜ = tidak isi)\n• Persentase kehadiran dan ranking\n• Gunakan data ini untuk follow-up anggota yang sering skip standup' },
     ],
   },
   owner: {
@@ -64,7 +68,11 @@ const GUIDES: Record<string, { title: string; color: string; sections: { heading
     sections: [
       { heading: 'Dashboard Owner', content: 'Anda bisa melihat:\n• Status board sprint harian semua brand\n• Progress KPI semua brand\n• Aktivitas chart 7 hari terakhir\n• Laporan harian terbaru' },
       { heading: 'Monitor KPI', content: 'Di menu Monitor KPI, pilih brand untuk melihat progress KPI minggu ini. Data diambil real-time dari daily log atau dari Weekly Report yang sudah disubmit (prioritas lebih tinggi).' },
-      { heading: 'Pengaturan', content: 'Anda bisa:\n• Tambah/edit brand\n• Manage user dan role\n• Tambah Master KPI baru (jika ada metric unik)\n• Set KPI yang aktif per brand\n• Set target KPI mingguan' },
+      { heading: 'Trend KPI (Tab Trend)', content: 'Di halaman Monitor KPI, klik tab "📈 Trend" untuk melihat:\n• Grafik line chart pergerakan semua KPI selama 8 minggu terakhir\n• Tabel summary per KPI dengan indikator tren (↑ naik / ↓ turun / → stabil)\n• Bandingkan performa antar minggu untuk identifikasi pola\n• Deteksi early warning jika ada KPI yang konsisten menurun' },
+      { heading: 'Kehadiran Tim (Tab Kehadiran)', content: 'Di halaman History Sprint, klik tab "📅 Kehadiran" untuk melihat:\n• Grid kehadiran seluruh tim (🌅 = sprint pagi, 🌆 = sprint sore, ⬜ = tidak isi)\n• Summary card: total hari, rata-rata kehadiran, anggota paling rajin\n• Ranking kehadiran dari tertinggi ke terendah\n• Filter per brand dan rentang tanggal\n• Gunakan untuk evaluasi kedisiplinan tim' },
+      { heading: 'Pengaturan', content: 'Anda bisa:\n• Tambah/edit brand\n• Manage user dan role\n• Tambah Master KPI baru (jika ada metric unik)\n• Set KPI yang aktif per brand\n• Set target KPI mingguan\n• Setup Telegram notifikasi (tab Telegram)' },
+      { heading: 'Setup Telegram (Tab Telegram di Pengaturan)', content: 'Untuk mengaktifkan notifikasi otomatis ke Telegram:\n1. Buka Pengaturan → Tab "Telegram"\n2. Klik "Tambah Destinasi"\n3. Isi: Nama, Bot Token, Chat ID, Topic ID Daily, Topic ID Weekly\n4. Set jadwal kirim (default: 17:30 untuk daily, 18:00 untuk weekly)\n5. Klik "Test" untuk verifikasi koneksi\n6. Aktifkan destinasi\n\nAnda bisa menambah beberapa destinasi (multi-group).\n\nCara mendapatkan Bot Token:\n• Chat @BotFather di Telegram → /newbot → ikuti instruksi\n\nCara mendapatkan Chat ID & Topic ID:\n• Tambahkan bot ke group → kirim pesan → cek via API getUpdates\n• Topic ID terlihat di URL saat membuka topic di Telegram Desktop' },
+      { heading: 'Trigger Manual & Cron', content: 'Di tab Telegram (Pengaturan), tersedia tombol:\n• "Kirim Daily Summary Sekarang" — trigger manual ringkasan harian\n• "Kirim Weekly Report Sekarang" — trigger manual laporan mingguan\n\nUntuk otomatis, setup cron job di Easypanel yang memanggil:\nGET /api/telegram/cron?secret=YOUR_CRON_SECRET\nSetiap menit atau setiap 5 menit. Sistem akan cek jadwal dan kirim otomatis.' },
     ],
   },
 };
