@@ -57,7 +57,7 @@ export default function PengaturanPage() {
   // Telegram state
   const [telegramConfigs, setTelegramConfigs] = useState<{ id: string; name: string; bot_token: string; chat_id: string; topic_daily: string; topic_weekly: string; is_active: boolean; schedule_daily: string; schedule_weekly: string }[]>([]);
   const [showTelegramModal, setShowTelegramModal] = useState(false);
-  const [telegramForm, setTelegramForm] = useState({ id: '', name: '', bot_token: '', chat_id: '', topic_daily: '', topic_weekly: '', is_active: true, schedule_daily: '17:30', schedule_weekly: '18:00' });
+  const [telegramForm, setTelegramForm] = useState({ id: '', name: '', bot_token: '', chat_id: '', topic_daily: '', topic_weekly: '', is_active: true, schedule_daily: '17:30', schedule_weekly: '07:00' });
   const [telegramSending, setTelegramSending] = useState<string | null>(null);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
@@ -371,7 +371,7 @@ export default function PengaturanPage() {
     if (res.ok) {
       showToast('✅ Konfigurasi Telegram tersimpan');
       setShowTelegramModal(false);
-      setTelegramForm({ id: '', name: '', bot_token: '', chat_id: '', topic_daily: '', topic_weekly: '', is_active: true, schedule_daily: '17:30', schedule_weekly: '18:00' });
+      setTelegramForm({ id: '', name: '', bot_token: '', chat_id: '', topic_daily: '', topic_weekly: '', is_active: true, schedule_daily: '17:30', schedule_weekly: '07:00' });
       fetch('/api/telegram/config').then(r => r.ok ? r.json() : []).then(setTelegramConfigs);
     } else {
       showToast('❌ Gagal menyimpan');
@@ -816,7 +816,7 @@ export default function PengaturanPage() {
               <h3 style={{ fontSize: 16, fontWeight: 600 }}>Destinasi Telegram</h3>
               <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Kirim notifikasi harian & weekly ke Telegram Group + Topic</p>
             </div>
-            <button className="btn btn-primary" onClick={() => { setTelegramForm({ id: '', name: '', bot_token: '', chat_id: '', topic_daily: '', topic_weekly: '', is_active: true, schedule_daily: '17:30', schedule_weekly: '18:00' }); setShowTelegramModal(true); }}>+ Tambah Destinasi</button>
+            <button className="btn btn-primary" onClick={() => { setTelegramForm({ id: '', name: '', bot_token: '', chat_id: '', topic_daily: '', topic_weekly: '', is_active: true, schedule_daily: '17:30', schedule_weekly: '07:00' }); setShowTelegramModal(true); }}>+ Tambah Destinasi</button>
           </div>
 
           {/* Quick Actions */}

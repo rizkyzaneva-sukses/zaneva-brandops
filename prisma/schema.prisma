@@ -318,7 +318,7 @@ model TelegramConfig {
   topic_weekly    String?
   is_active       Boolean  @default(true)
   schedule_daily  String   @default("17:30")
-  schedule_weekly String   @default("18:00")
+  schedule_weekly String   @default("07:00")
   created_at      DateTime @default(now())
   updated_at      DateTime @updatedAt
 }

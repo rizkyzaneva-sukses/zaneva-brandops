@@ -3,7 +3,8 @@ import { prisma } from '@/lib/prisma';
 
 // GET - Cron endpoint that checks if it's time to send notifications
 // Called every minute by Easypanel cron: curl https://domain/api/telegram/cron?secret=YOUR_SECRET
-// Or set up in Easypanel to run at specific times
+// Daily summary: sent at schedule_daily time every day
+// Weekly report: sent at schedule_weekly time on H+1 after period ends (8, 15, 22, 1)
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const secret = searchParams.get('secret');
@@ -19,6 +20,11 @@ export async function GET(req: NextRequest) {
     const currentHour = wibTime.getHours();
     const currentMinute = wibTime.getMinutes();
     const currentTimeStr = `${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}`;
+    const currentDay = wibTime.getDate();
+
+    // H+1 after period ends: periods end on 7, 14, 21, last day of month
+    // So H+1 = 8, 15, 22, 1 (first of next month)
+    const isWeeklyReportDay = [1, 8, 15, 22].includes(currentDay);
 
     // Get active configs and check schedules
     const configs = await prisma.telegramConfig.findMany({ where: { is_active: true } });
@@ -31,8 +37,8 @@ export async function GET(req: NextRequest) {
         if (config.schedule_daily === currentTimeStr && !dailyTriggered) {
             dailyTriggered = true;
         }
-        // Check weekly schedule
-        if (config.schedule_weekly === currentTimeStr && !weeklyTriggered) {
+        // Check weekly schedule — only on H+1 after period end
+        if (config.schedule_weekly === currentTimeStr && isWeeklyReportDay && !weeklyTriggered) {
             weeklyTriggered = true;
         }
     }
@@ -50,24 +56,19 @@ export async function GET(req: NextRequest) {
     }
 
     if (weeklyTriggered) {
-        // Only send weekly on period end days (7, 14, 21, last day of month)
-        const day = wibTime.getDate();
-        const lastDay = new Date(wibTime.getFullYear(), wibTime.getMonth() + 1, 0).getDate();
-        const isPeriodEnd = [7, 14, 21, lastDay].includes(day);
-
-        if (isPeriodEnd) {
-            try {
-                await fetch(`${baseUrl}/api/telegram/weekly-report?secret=${process.env.CRON_SECRET}`, { method: 'POST' });
-                results.push('weekly-report sent');
-            } catch (e) {
-                results.push('weekly-report failed: ' + String(e));
-            }
+        try {
+            await fetch(`${baseUrl}/api/telegram/weekly-report?secret=${process.env.CRON_SECRET}`, { method: 'POST' });
+            results.push('weekly-report sent');
+        } catch (e) {
+            results.push('weekly-report failed: ' + String(e));
         }
     }
 
     return NextResponse.json({
         ok: true,
         time_wib: currentTimeStr,
+        day: currentDay,
+        is_weekly_report_day: isWeeklyReportDay,
         triggered: results.length > 0 ? results : 'nothing to send',
     });
 }
