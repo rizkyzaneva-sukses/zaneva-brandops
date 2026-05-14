@@ -57,14 +57,17 @@ function getWeekNumber(date: Date): number {
 export function getCurrentWeek(date: Date = new Date()) {
   const { period, periodStart, periodEnd, monthDate } = getPeriodForDate(date);
   const weekNum = getWeekNumber(date);
-  const monthAbbr = format(monthDate, 'MMM yyyy', { locale: id });
+  const monthUpper = format(monthDate, 'MMM yyyy', { locale: id }).toUpperCase();
+  const startDay = periodStart.getDate();
+  const endDay = periodEnd.getDate();
+  const label = `W${weekNum} [${startDay} - ${endDay} ${monthUpper}]`;
 
   return {
     week_start: format(periodStart, 'yyyy-MM-dd'),
     week_end: format(periodEnd, 'yyyy-MM-dd'),
     week_start_date: periodStart,
     week_end_date: periodEnd,
-    week_label: `W${weekNum} \u2013 ${monthAbbr}`,
+    week_label: label,
     days_elapsed: differenceInDays(date, periodStart) + 1,
     total_days: differenceInDays(periodEnd, periodStart) + 1,
     period,
@@ -101,8 +104,8 @@ export function getWeekOptions(monthsBack = 2) {
       if (periodStart > today) continue;
 
       const weekNum = getWeekNumber(periodStart);
-      const monthAbbr = format(monthDate, 'MMM yyyy', { locale: id });
-      const label = `W${weekNum} \u2013 ${monthAbbr}`;
+      const monthUpper = format(monthDate, 'MMM yyyy', { locale: id }).toUpperCase();
+      const label = `W${weekNum} [${pd.start} - ${pd.end} ${monthUpper}]`;
 
       if (!weeks.find(w => w.week_label === label)) {
         weeks.push({
