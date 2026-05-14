@@ -308,3 +308,17 @@ model CustomRole {
   created_at           DateTime @default(now())
   updated_at           DateTime @updatedAt
 }
+
+model TelegramConfig {
+  id              String   @id @default(cuid())
+  name            String
+  bot_token       String
+  chat_id         String
+  topic_daily     String?
+  topic_weekly    String?
+  is_active       Boolean  @default(true)
+  schedule_daily  String   @default("17:30")
+  schedule_weekly String   @default("18:00")
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+}

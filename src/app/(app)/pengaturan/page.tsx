@@ -54,12 +54,19 @@ export default function PengaturanPage() {
   const [deleteUser, setDeleteUser] = useState<User | null>(null);
   const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
 
+  // Telegram state
+  const [telegramConfigs, setTelegramConfigs] = useState<{ id: string; name: string; bot_token: string; chat_id: string; topic_daily: string; topic_weekly: string; is_active: boolean; schedule_daily: string; schedule_weekly: string }[]>([]);
+  const [showTelegramModal, setShowTelegramModal] = useState(false);
+  const [telegramForm, setTelegramForm] = useState({ id: '', name: '', bot_token: '', chat_id: '', topic_daily: '', topic_weekly: '', is_active: true, schedule_daily: '17:30', schedule_weekly: '18:00' });
+  const [telegramSending, setTelegramSending] = useState<string | null>(null);
+
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.json()).then(d => setCurrentUser(d.user));
     fetch('/api/brands').then(r => r.json()).then(setBrands);
     fetch('/api/users').then(r => r.json()).then(setUsers);
+    fetch('/api/telegram/config').then(r => r.ok ? r.json() : []).then(setTelegramConfigs);
   }, []);
 
   useEffect(() => {
@@ -352,7 +359,61 @@ export default function PengaturanPage() {
     fetch('/api/users').then(r => r.json()).then(setUsers);
   }
 
-  const tabs = currentUser?.role === 'owner' ? ['Brand', 'Tim', 'KPI Config', 'Sistem (Owner)'] : ['Brand', 'Tim', 'KPI Config'];
+  // Telegram functions
+  async function handleSaveTelegram() {
+    setSaving(true);
+    const res = await fetch('/api/telegram/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(telegramForm),
+    });
+    setSaving(false);
+    if (res.ok) {
+      showToast('✅ Konfigurasi Telegram tersimpan');
+      setShowTelegramModal(false);
+      setTelegramForm({ id: '', name: '', bot_token: '', chat_id: '', topic_daily: '', topic_weekly: '', is_active: true, schedule_daily: '17:30', schedule_weekly: '18:00' });
+      fetch('/api/telegram/config').then(r => r.ok ? r.json() : []).then(setTelegramConfigs);
+    } else {
+      showToast('❌ Gagal menyimpan');
+    }
+  }
+
+  async function handleDeleteTelegram(id: string) {
+    if (!confirm('Hapus konfigurasi Telegram ini?')) return;
+    await fetch(`/api/telegram/config?id=${id}`, { method: 'DELETE' });
+    showToast('Konfigurasi dihapus');
+    fetch('/api/telegram/config').then(r => r.ok ? r.json() : []).then(setTelegramConfigs);
+  }
+
+  async function handleTestTelegram(id: string) {
+    setTelegramSending(id);
+    const res = await fetch('/api/telegram/config', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    const data = await res.json();
+    setTelegramSending(null);
+    showToast(data.ok ? '✅ Test message terkirim!' : '❌ Gagal mengirim test');
+  }
+
+  async function handleTriggerDaily() {
+    setSaving(true);
+    const res = await fetch('/api/telegram/daily-summary', { method: 'POST' });
+    const data = await res.json();
+    setSaving(false);
+    showToast(data.ok ? `✅ Daily summary terkirim (${data.sent} destinasi)` : '❌ Gagal mengirim');
+  }
+
+  async function handleTriggerWeekly() {
+    setSaving(true);
+    const res = await fetch('/api/telegram/weekly-report', { method: 'POST' });
+    const data = await res.json();
+    setSaving(false);
+    showToast(data.ok ? `✅ Weekly report terkirim (${data.sent} destinasi)` : `❌ ${data.error || 'Gagal mengirim'}`);
+  }
+
+  const tabs = currentUser?.role === 'owner' ? ['Brand', 'Tim', 'KPI Config', 'Telegram', 'Sistem (Owner)'] : ['Brand', 'Tim', 'KPI Config'];
 
   return (
     <div>
@@ -741,6 +802,100 @@ export default function PengaturanPage() {
                   <button className="btn btn-secondary" onClick={() => setShowKpiModal(false)}>Batal</button>
                   <button className="btn btn-primary" onClick={handleSaveKpi} disabled={saving || !kpiForm.name}>Simpan ke Kamus KPI</button>
                 </div>
+              </div>
+            </Modal>
+          )}
+        </div>
+      )}
+
+      {/* TELEGRAM TAB */}
+      {activeTab === 'Telegram' && (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <div>
+              <h3 style={{ fontSize: 16, fontWeight: 600 }}>Destinasi Telegram</h3>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Kirim notifikasi harian & weekly ke Telegram Group + Topic</p>
+            </div>
+            <button className="btn btn-primary" onClick={() => { setTelegramForm({ id: '', name: '', bot_token: '', chat_id: '', topic_daily: '', topic_weekly: '', is_active: true, schedule_daily: '17:30', schedule_weekly: '18:00' }); setShowTelegramModal(true); }}>+ Tambah Destinasi</button>
+          </div>
+
+          {/* Quick Actions */}
+          <div className="card" style={{ marginBottom: 20, padding: 16 }}>
+            <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 12 }}>Kirim Manual</h4>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button className="btn btn-ghost" onClick={handleTriggerDaily} disabled={saving}>📋 Kirim Daily Summary</button>
+              <button className="btn btn-ghost" onClick={handleTriggerWeekly} disabled={saving}>📊 Kirim Weekly Report</button>
+            </div>
+          </div>
+
+          {/* Config List */}
+          <div className="card">
+            {telegramConfigs.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 32 }}>Belum ada konfigurasi Telegram. Klik &quot;+ Tambah Destinasi&quot; untuk mulai.</p>
+            ) : (
+              <table className="table">
+                <thead><tr><th>Nama</th><th>Chat ID</th><th>Jadwal Daily</th><th>Jadwal Weekly</th><th>Status</th><th>Aksi</th></tr></thead>
+                <tbody>
+                  {telegramConfigs.map(cfg => (
+                    <tr key={cfg.id}>
+                      <td style={{ fontWeight: 600 }}>{cfg.name}</td>
+                      <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{cfg.chat_id}</td>
+                      <td>{cfg.schedule_daily} WIB</td>
+                      <td>{cfg.schedule_weekly} WIB</td>
+                      <td><span className={`badge ${cfg.is_active ? 'status-on-track' : 'status-behind'}`}>{cfg.is_active ? 'Aktif' : 'Nonaktif'}</span></td>
+                      <td style={{ display: 'flex', gap: 6 }}>
+                        <button className="btn btn-ghost btn-sm" onClick={() => handleTestTelegram(cfg.id)} disabled={telegramSending === cfg.id}>{telegramSending === cfg.id ? '...' : '🧪 Test'}</button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => { setTelegramForm({ id: cfg.id, name: cfg.name, bot_token: cfg.bot_token, chat_id: cfg.chat_id, topic_daily: cfg.topic_daily || '', topic_weekly: cfg.topic_weekly || '', is_active: cfg.is_active, schedule_daily: cfg.schedule_daily, schedule_weekly: cfg.schedule_weekly }); setShowTelegramModal(true); }}>✏️</button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => handleDeleteTelegram(cfg.id)}>🗑️</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* Telegram Modal */}
+          {showTelegramModal && (
+            <Modal title={telegramForm.id ? 'Edit Destinasi Telegram' : 'Tambah Destinasi Telegram'} onClose={() => setShowTelegramModal(false)}>
+              <div style={{ display: 'grid', gap: 16 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600 }}>Nama Destinasi</label>
+                  <input className="input" placeholder="e.g. Group Zaneva Ops" value={telegramForm.name} onChange={e => setTelegramForm({ ...telegramForm, name: e.target.value })} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600 }}>Bot Token</label>
+                  <input className="input" placeholder="123456:ABC-DEF..." value={telegramForm.bot_token} onChange={e => setTelegramForm({ ...telegramForm, bot_token: e.target.value })} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600 }}>Chat ID (Group)</label>
+                  <input className="input" placeholder="-1001234567890" value={telegramForm.chat_id} onChange={e => setTelegramForm({ ...telegramForm, chat_id: e.target.value })} />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600 }}>Topic ID (Daily)</label>
+                    <input className="input" placeholder="Thread ID untuk daily" value={telegramForm.topic_daily} onChange={e => setTelegramForm({ ...telegramForm, topic_daily: e.target.value })} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600 }}>Topic ID (Weekly)</label>
+                    <input className="input" placeholder="Thread ID untuk weekly" value={telegramForm.topic_weekly} onChange={e => setTelegramForm({ ...telegramForm, topic_weekly: e.target.value })} />
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600 }}>Jadwal Daily (WIB)</label>
+                    <input className="input" type="time" value={telegramForm.schedule_daily} onChange={e => setTelegramForm({ ...telegramForm, schedule_daily: e.target.value })} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600 }}>Jadwal Weekly (WIB)</label>
+                    <input className="input" type="time" value={telegramForm.schedule_weekly} onChange={e => setTelegramForm({ ...telegramForm, schedule_weekly: e.target.value })} />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input type="checkbox" checked={telegramForm.is_active} onChange={e => setTelegramForm({ ...telegramForm, is_active: e.target.checked })} />
+                  <label style={{ fontSize: 13 }}>Aktif</label>
+                </div>
+                <button className="btn btn-primary" onClick={handleSaveTelegram} disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan'}</button>
               </div>
             </Modal>
           )}
