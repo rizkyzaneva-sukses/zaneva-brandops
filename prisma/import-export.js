@@ -37,7 +37,7 @@ const BRAND_ALIASES = {
 const KPI_OVERRIDES = {
   'Omzet Shopee': { id: 'kpi-omzet-shopee', name: 'Omzet Shopee', auto_source_role: 'brand_manager', auto_source: 'omzet_shopee', auto_aggregation: 'sum', unit: 'currency', order_num: 1, platform: 'shopee' },
   'Omzet TikTok Shop': { id: 'kpi-omzet-tiktok', name: 'Omzet TikTok', auto_source_role: 'brand_manager', auto_source: 'omzet_tiktok', auto_aggregation: 'sum', unit: 'currency', order_num: 2, platform: 'tiktok' },
-  'Omzet MP Lain': { id: 'kpi-omzet-lainnya', name: 'Omzet Lainnya', auto_source_role: 'brand_manager', auto_source: 'omzet_lainnya', auto_aggregation: 'sum', unit: 'currency', order_num: 3 },
+  'Omzet MP Lain': { id: 'kpi-omzet-lainnya', name: 'Omzet Lainnya FIX', auto_source_role: 'brand_manager', auto_source: 'omzet_lainnya', auto_aggregation: 'sum', unit: 'currency', order_num: 3 },
   'Total GMV': { id: 'kpi-total-gmv', name: 'Total GMV', auto_source_role: null, auto_source: null, auto_aggregation: 'sum', unit: 'currency', category: 'auto_sum', order_num: 4 },
   'Spending Iklan': { id: 'kpi-iklan-spend', name: 'Iklan Spend', auto_source_role: 'owner', auto_source: 'iklan_spend', auto_aggregation: 'sum', unit: 'currency', order_num: 5 },
   'ROAS Iklan': { id: 'kpi-roas-iklan', name: 'ROAS Iklan', auto_source_role: 'owner', auto_source: 'roas_iklan', auto_aggregation: 'avg', unit: 'number', order_num: 6 },

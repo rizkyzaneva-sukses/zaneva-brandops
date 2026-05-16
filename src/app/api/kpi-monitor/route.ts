@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import { sessionOptions, SessionData } from '@/lib/session';
 import { aggregateKpi, calcPct, getKpiStatus, parseNum, calcEffectivePct } from '@/lib/utils';
+import { ensureOmzetLainnyaFix } from '@/lib/omzetLainnyaFix';
 
 export async function GET(req: NextRequest) {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
@@ -22,9 +23,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Missing params' }, { status: 400 });
   }
 
+  await ensureOmzetLainnyaFix();
+
   // Get enabled KPIs for this brand
   const kpiConfigs = await prisma.kpiBrandConfig.findMany({
-    where: { brand_id, is_enabled: true },
+    where: { brand_id, is_enabled: true, kpi_item: { is_active: true } },
     include: { kpi_item: true },
   });
 

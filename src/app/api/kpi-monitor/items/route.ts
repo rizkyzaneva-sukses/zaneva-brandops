@@ -3,10 +3,19 @@ import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import { sessionOptions, SessionData } from '@/lib/session';
+import {
+  ensureOmzetLainnyaFix,
+  isOmzetLainnyaFixName,
+  OMZET_LAINNYA_FIX_ID,
+  OMZET_LAINNYA_FIX_NAME,
+  OMZET_LAINNYA_FIX_SOURCE,
+} from '@/lib/omzetLainnyaFix';
 
 export async function GET(req: NextRequest) {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
   if (!session.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  await ensureOmzetLainnyaFix();
 
   const { searchParams } = new URL(req.url);
   const brand_id = searchParams.get('brand_id');
@@ -15,7 +24,11 @@ export async function GET(req: NextRequest) {
   if (brand_id) {
     // Return KPI brand configs for this brand
     let configs = await prisma.kpiBrandConfig.findMany({
-      where: { brand_id, ...(enabled_only ? { is_enabled: true } : {}) },
+      where: {
+        brand_id,
+        ...(enabled_only ? { is_enabled: true } : {}),
+        kpi_item: { is_active: true },
+      },
       include: { kpi_item: true },
     });
 
@@ -38,7 +51,7 @@ export async function GET(req: NextRequest) {
           });
 
           configs = await prisma.kpiBrandConfig.findMany({
-            where: { brand_id },
+            where: { brand_id, kpi_item: { is_active: true } },
             include: { kpi_item: true },
           });
         }
@@ -84,6 +97,12 @@ export async function POST(req: NextRequest) {
 
   if (!name || !category || !unit) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+  }
+
+  if (isOmzetLainnyaFixName(name)) {
+    await ensureOmzetLainnyaFix();
+    const canonical = await prisma.kpiItem.findUnique({ where: { id: OMZET_LAINNYA_FIX_ID } });
+    return NextResponse.json(canonical);
   }
 
   // Get current max order_num
@@ -132,6 +151,13 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
   }
 
+  if (isOmzetLainnyaFixName(name) && id !== OMZET_LAINNYA_FIX_ID) {
+    await ensureOmzetLainnyaFix();
+    return NextResponse.json({ error: 'Gunakan KPI "Omzet Lainnya FIX" yang sudah disediakan.' }, { status: 400 });
+  }
+
+  const isOmzetLainnyaFix = id === OMZET_LAINNYA_FIX_ID || isOmzetLainnyaFixName(name);
+
   // Store auto_sum config in platform field as JSON
   let platformData: string | null = null;
   if (category === 'auto_sum') {
@@ -142,13 +168,18 @@ export async function PUT(req: NextRequest) {
   const updatedKpi = await prisma.kpiItem.update({
     where: { id },
     data: {
-      name,
-      category,
-      unit,
-      description,
+      name: isOmzetLainnyaFix ? OMZET_LAINNYA_FIX_NAME : name,
+      category: isOmzetLainnyaFix ? 'auto_daily_log' : category,
+      unit: isOmzetLainnyaFix ? 'currency' : unit,
+      description: isOmzetLainnyaFix ? 'KPI omzet lainnya yang diambil dari Daily Log sore.' : description,
       higher_is_better: higher_is_better !== false,
-      auto_source_role: auto_source_role || null,
-      auto_source: category === 'auto_daily_log' ? `custom_${id}` : null,
+      auto_source_role: isOmzetLainnyaFix ? 'brand_manager' : (auto_source_role || null),
+      auto_source: isOmzetLainnyaFix
+        ? OMZET_LAINNYA_FIX_SOURCE
+        : category === 'auto_daily_log'
+          ? `custom_${id}`
+          : null,
+      auto_aggregation: isOmzetLainnyaFix ? 'sum' : undefined,
       platform: platformData,
     },
   });
@@ -156,7 +187,7 @@ export async function PUT(req: NextRequest) {
   // Update denormalized kpi_name in all brand configs
   await prisma.kpiBrandConfig.updateMany({
     where: { kpi_item_id: id },
-    data: { kpi_name: name },
+    data: { kpi_name: isOmzetLainnyaFix ? OMZET_LAINNYA_FIX_NAME : name },
   });
 
   return NextResponse.json(updatedKpi);
@@ -173,6 +204,10 @@ export async function DELETE(req: NextRequest) {
 
   if (!id) {
     return NextResponse.json({ error: 'Missing KPI item id' }, { status: 400 });
+  }
+
+  if (id === OMZET_LAINNYA_FIX_ID) {
+    return NextResponse.json({ error: 'KPI "Omzet Lainnya FIX" wajib dipertahankan dan tidak bisa dihapus.' }, { status: 400 });
   }
 
   // Delete related records first

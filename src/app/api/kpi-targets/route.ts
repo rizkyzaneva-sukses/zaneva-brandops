@@ -3,10 +3,18 @@ import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import { sessionOptions, SessionData } from '@/lib/session';
+import {
+  ensureOmzetLainnyaFix,
+  isOmzetLainnyaFixName,
+  OMZET_LAINNYA_FIX_ID,
+  OMZET_LAINNYA_FIX_NAME,
+} from '@/lib/omzetLainnyaFix';
 
 export async function GET(req: NextRequest) {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
   if (!session.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  await ensureOmzetLainnyaFix();
 
   const { searchParams } = new URL(req.url);
   const brand_id = searchParams.get('brand_id');
@@ -17,7 +25,7 @@ export async function GET(req: NextRequest) {
   if (week_label) where.week_label = week_label;
 
   const targets = await prisma.kpiWeeklyTarget.findMany({
-    where,
+    where: { ...where, kpi_item: { is_active: true } },
     include: { kpi_item: true },
     orderBy: { kpi_item: { order_num: 'asc' } },
   });
@@ -31,10 +39,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  await ensureOmzetLainnyaFix();
+
   const { targets } = await req.json(); // Array of targets to save
 
+  const normalizedTargets = new Map<string, { brand_id: string; brand_name: string; kpi_item_id: string; kpi_name: string; week_label: string; week_start_date: string; week_end_date: string; target_value: number }>();
+
+  for (const target of targets as { brand_id: string; brand_name: string; kpi_item_id: string; kpi_name: string; week_label: string; week_start_date: string; week_end_date: string; target_value: number }[]) {
+    const normalized = isOmzetLainnyaFixName(target.kpi_name)
+      ? { ...target, kpi_item_id: OMZET_LAINNYA_FIX_ID, kpi_name: OMZET_LAINNYA_FIX_NAME }
+      : target;
+    const key = `${normalized.brand_id}::${normalized.week_label}::${normalized.kpi_item_id}`;
+    normalizedTargets.set(key, normalized);
+  }
+
   const results = await Promise.all(
-    targets.map((t: { brand_id: string; brand_name: string; kpi_item_id: string; kpi_name: string; week_label: string; week_start_date: string; week_end_date: string; target_value: number }) =>
+    Array.from(normalizedTargets.values()).map((t) =>
       prisma.kpiWeeklyTarget.upsert({
         where: {
           brand_id_week_label_kpi_item_id: {
