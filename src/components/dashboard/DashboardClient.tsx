@@ -11,7 +11,7 @@ interface Props {
   pagiSubmitted: boolean;
   soreSubmitted: boolean;
   dailyCounts: { date: string; count: number }[];
-  statusBoardData: { brand_name: string; brand_id: string; statuses: Record<string, { pagi: boolean; sore: boolean }> }[];
+  statusBoardData: { brand_name: string; brand_id: string; statuses: Record<string, { pagi: boolean; sore: boolean; name: string }> }[];
   recentReports: { id: string; title: string; category: string; status: string; report_date: string; submitted_by_name: string | null; brand_name: string }[];
   weekLabel: string;
   brandId: string | null;
@@ -116,25 +116,39 @@ export default function DashboardClient({ user, todayLabel, pagiSubmitted, soreS
           <div style={{ display: 'grid', gap: 12 }}>
             {statusBoardData.map(brand => {
               const entries = Object.entries(brand.statuses);
-              const pagi = entries.filter(([, v]) => v.pagi).length;
-              const sore = entries.filter(([, v]) => v.sore).length;
+              const pagiCount = entries.filter(([, v]) => v.pagi).length;
+              const soreCount = entries.filter(([, v]) => v.sore).length;
               const total = entries.length;
+              const belumPagi = entries.filter(([, v]) => !v.pagi).map(([, v]) => v.name.split(' ')[0]);
+              const belumSore = entries.filter(([, v]) => !v.sore).map(([, v]) => v.name.split(' ')[0]);
 
               return (
-                <div key={brand.brand_id} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '10px 14px', background: 'var(--bg-surface)', borderRadius: 8 }}>
-                  <div style={{ width: 100, fontSize: 13, fontWeight: 600, color: 'var(--gold)' }}>{brand.brand_name}</div>
-                  <div style={{ display: 'flex', gap: 20, flex: 1 }}>
-                    <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                      Sprint Pagi: <span style={{ color: 'var(--green)', fontWeight: 600 }}>{pagi}/{total}</span>
+                <div key={brand.brand_id} style={{ padding: '10px 14px', background: 'var(--bg-surface)', borderRadius: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                    <div style={{ width: 110, fontSize: 13, fontWeight: 600, color: 'var(--gold)', flexShrink: 0 }}>{brand.brand_name}</div>
+                    <div style={{ display: 'flex', gap: 16, flex: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                        Sprint Pagi: <span style={{ color: 'var(--green)', fontWeight: 600 }}>{pagiCount}/{total}</span>
+                        {belumPagi.length > 0 && (
+                          <span style={{ color: 'var(--text-muted)', fontSize: 11, marginLeft: 6 }}>
+                            ({belumPagi.join(', ')})
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                        Sprint Sore: <span style={{ color: soreCount === total ? 'var(--green)' : 'var(--amber)', fontWeight: 600 }}>{soreCount}/{total}</span>
+                        {belumSore.length > 0 && (
+                          <span style={{ color: 'var(--text-muted)', fontSize: 11, marginLeft: 6 }}>
+                            ({belumSore.join(', ')})
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                      Sprint Sore: <span style={{ color: pagi === total ? 'var(--green)' : 'var(--amber)', fontWeight: 600 }}>{sore}/{total}</span>
+                    <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                      {entries.map(([uid, v]) => (
+                        <div key={uid} title={`${v.name}: ${v.pagi && v.sore ? 'Lengkap' : v.pagi ? 'Pagi saja' : 'Belum isi'}`} style={{ width: 10, height: 10, borderRadius: '50%', background: v.pagi && v.sore ? 'var(--green)' : v.pagi ? 'var(--amber)' : 'var(--border)' }} />
+                      ))}
                     </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    {entries.map(([uid, v]) => (
-                      <div key={uid} title={v.pagi && v.sore ? 'Lengkap' : v.pagi ? 'Pagi saja' : 'Belum'} style={{ width: 10, height: 10, borderRadius: '50%', background: v.pagi && v.sore ? 'var(--green)' : v.pagi ? 'var(--amber)' : 'var(--border)' }} />
-                    ))}
                   </div>
                 </div>
               );

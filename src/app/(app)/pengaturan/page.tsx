@@ -5,7 +5,7 @@ import { ROLE_LABELS, ROLE_CLASS } from '@/lib/utils';
 
 interface Brand { id: string; name: string; description: string; status: string; }
 interface User { id: string; email: string; full_name: string; role: string; brand_id: string | null; brand_name: string | null; is_active: boolean; }
-interface KpiConfig { kpi_item_id: string; kpi_name: string; is_enabled: boolean; kpi_item: { unit: string; category: string; description: string | null; auto_source_role?: string | null; order_num: number }; }
+interface KpiConfig { kpi_item_id: string; kpi_name: string; is_enabled: boolean; kpi_item: { unit: string; category: string; description: string | null; auto_source_role?: string | null; order_num: number; higher_is_better?: boolean }; }
 interface ImportSummary {
   source_file: string;
   imported_user_emails: string[];
@@ -37,7 +37,7 @@ export default function PengaturanPage() {
   const [showUserModal, setShowUserModal] = useState(false);
   const [brandForm, setBrandForm] = useState({ name: '', description: '', status: 'active' });
   const [userForm, setUserForm] = useState({ email: '', full_name: '', role: 'creative', brand_id: '', password: 'zaneva123' });
-  const [kpiForm, setKpiForm] = useState<{ name: string; category: string; unit: string; description: string; auto_source_role: string; auto_sum_formula?: string; auto_sum_kpi_names?: string }>({ name: '', category: 'manual', unit: 'currency', description: '', auto_source_role: '', auto_sum_formula: 'all_currency', auto_sum_kpi_names: '' });
+  const [kpiForm, setKpiForm] = useState<{ name: string; category: string; unit: string; description: string; auto_source_role: string; auto_sum_formula?: string; auto_sum_kpi_names?: string; higher_is_better: boolean }>({ name: '', category: 'manual', unit: 'currency', description: '', auto_source_role: '', auto_sum_formula: 'all_currency', auto_sum_kpi_names: '', higher_is_better: true });
   const [editKpiId, setEditKpiId] = useState<string | null>(null);
   const [showKpiModal, setShowKpiModal] = useState(false);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
@@ -154,6 +154,7 @@ export default function PengaturanPage() {
       auto_source_role: kpiForm.auto_source_role,
       auto_sum_formula: kpiForm.auto_sum_formula,
       auto_sum_kpi_names: kpiForm.auto_sum_kpi_names,
+      higher_is_better: kpiForm.higher_is_better,
     };
     const res = await fetch('/api/kpi-monitor/items', {
       method: isEdit ? 'PUT' : 'POST',
@@ -163,7 +164,7 @@ export default function PengaturanPage() {
     setSaving(false);
     if (res.ok) {
       showToast(`✅ Master KPI berhasil ${isEdit ? 'diperbarui' : 'ditambahkan'}`);
-      setKpiForm({ name: '', category: 'manual', unit: 'currency', description: '', auto_source_role: '', auto_sum_formula: 'all_currency', auto_sum_kpi_names: '' });
+      setKpiForm({ name: '', category: 'manual', unit: 'currency', description: '', auto_source_role: '', auto_sum_formula: 'all_currency', auto_sum_kpi_names: '', higher_is_better: true });
       setEditKpiId(null);
       setShowKpiModal(false);
       // Refresh current brand KPI configs if a brand is selected so it auto-syncs
@@ -185,6 +186,7 @@ export default function PengaturanPage() {
       unit: c.kpi_item.unit,
       description: c.kpi_item.description || '',
       auto_source_role: c.kpi_item.auto_source_role || '',
+      higher_is_better: c.kpi_item.higher_is_better !== false,
     });
     setShowKpiModal(true);
   }
@@ -644,7 +646,7 @@ export default function PengaturanPage() {
                 </select>
               </div>
             </div>
-            <button className="btn btn-primary" onClick={() => { setEditKpiId(null); setKpiForm({ name: '', category: 'manual', unit: 'currency', description: '', auto_source_role: '', auto_sum_formula: 'all_currency', auto_sum_kpi_names: '' }); setShowKpiModal(true); }}>+ Tambah Master KPI</button>
+            <button className="btn btn-primary" onClick={() => { setEditKpiId(null); setKpiForm({ name: '', category: 'manual', unit: 'currency', description: '', auto_source_role: '', auto_sum_formula: 'all_currency', auto_sum_kpi_names: '', higher_is_better: true }); setShowKpiModal(true); }}>+ Tambah Master KPI</button>
           </div>
 
           {selectedBrandForKpi && (
@@ -794,6 +796,16 @@ export default function PengaturanPage() {
                   </p>
                 </div>
 
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Arah Target *</label>
+                  <select className="input" value={kpiForm.higher_is_better ? 'true' : 'false'} onChange={e => setKpiForm(p => ({ ...p, higher_is_better: e.target.value === 'true' }))}>
+                    <option value="true">↑ Semakin tinggi semakin baik (Omzet, ROAS, Order)</option>
+                    <option value="false">↓ Semakin rendah semakin baik (Spending, Retur, Komplain)</option>
+                  </select>
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                    Menentukan apakah nilai KPI yang lebih tinggi berarti lebih baik atau lebih buruk.
+                  </p>
+                </div>
                 <div>
                   <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Deskripsi</label>
                   <input className="input" value={kpiForm.description} onChange={e => setKpiForm(p => ({ ...p, description: e.target.value }))} placeholder="Penjelasan singkat tentang KPI ini" />
@@ -956,6 +968,28 @@ export default function PengaturanPage() {
             </p>
             <button className="btn" style={{ background: '#F59E0B', color: 'white', border: 'none' }} onClick={handleGenerateDummy} disabled={saving}>
               {saving ? 'Loading...' : 'Generate Dummy Data'}
+            </button>
+          </div>
+
+          <div className="card" style={{ border: '1px solid rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.03)' }}>
+            <h3 style={{ fontSize: 16, fontWeight: 600, color: '#F97316', marginBottom: 8 }}>🗑 Hapus User Lama Zaneva</h3>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
+              Hapus permanen akun: <strong>Budi (Marketplace)</strong>, <strong>Ayu (R&D)</strong>, <strong>Dian (Creative)</strong>, <strong>Sari (BM)</strong>, <strong>Rini (PR)</strong> beserta seluruh sprint dan laporan mereka.
+            </p>
+            <button className="btn" style={{ background: '#F97316', color: 'white', border: 'none' }} onClick={async () => {
+              if (!confirm('Hapus permanen 5 user Zaneva lama (Budi, Ayu, Dian, Sari, Rini) dan semua data mereka? Aksi ini tidak bisa dibatalkan.')) return;
+              setSaving(true);
+              const res = await fetch('/api/admin/remove-users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ emails: ['marketplace.zaneva@zaneva.id', 'rnd.zaneva@zaneva.id', 'creative.zaneva@zaneva.id', 'bm.zaneva@zaneva.id', 'pr.zaneva@zaneva.id'] }),
+              });
+              const data = await res.json();
+              setSaving(false);
+              showToast(res.ok ? `✅ ${data.message}` : `❌ ${data.error}`);
+              if (res.ok) fetch('/api/users').then(r => r.json()).then(setUsers);
+            }} disabled={saving}>
+              {saving ? 'Menghapus...' : 'Hapus 5 User Zaneva'}
             </button>
           </div>
 

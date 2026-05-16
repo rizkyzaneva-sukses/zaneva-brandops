@@ -83,15 +83,8 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  if (existingStandup && existingStandup.status === 'submitted') {
-    const canEdit = ['brand_manager', 'owner'].includes(session.user.role);
-    if (!canEdit) {
-      return NextResponse.json(
-        { error: 'Hanya Brand Manager dan Owner yang dapat mengedit sprint yang sudah disubmit' },
-        { status: 403 }
-      );
-    }
-  }
+  // Any user can edit their own submitted standup (sprint milik sendiri)
+  // Only owner/brand_manager can edit others' sprints (via PUT endpoint)
 
   try {
     const standup = await prisma.standup.upsert({

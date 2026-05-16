@@ -44,7 +44,7 @@ export default async function DashboardPage() {
   }
 
   // Standup status board (owner: all brands, others: own brand)
-  let statusBoardData: { brand_name: string; brand_id: string; statuses: Record<string, { pagi: boolean; sore: boolean }> }[] = [];
+  let statusBoardData: { brand_name: string; brand_id: string; statuses: Record<string, { pagi: boolean; sore: boolean; name: string }> }[] = [];
 
   if (['owner', 'admin'].includes(user.role)) {
     const brands = await prisma.brand.findMany({ where: { status: 'active' } });
@@ -55,12 +55,12 @@ export default async function DashboardPage() {
 
     statusBoardData = brands.map(brand => {
       const brandUsers = allUsers.filter(u => u.brand_id === brand.id);
-      const statuses: Record<string, { pagi: boolean; sore: boolean }> = {};
+      const statuses: Record<string, { pagi: boolean; sore: boolean; name: string }> = {};
 
       for (const bu of brandUsers) {
         const pagi = todayAllStandups.some(s => s.user_id === bu.id && s.session === 'pagi' && s.status === 'submitted');
         const sore = todayAllStandups.some(s => s.user_id === bu.id && s.session === 'sore' && s.status === 'submitted');
-        statuses[bu.id] = { pagi, sore };
+        statuses[bu.id] = { pagi, sore, name: bu.full_name };
       }
 
       return { brand_name: brand.name, brand_id: brand.id, statuses };

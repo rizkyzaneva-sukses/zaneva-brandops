@@ -215,6 +215,16 @@ export function calcPct(actual: number, target: number): number {
   return Math.round((actual / target) * 100);
 }
 
+// For KPIs where lower is better (e.g. spending), invert the percentage for status calculation
+// For lower-is-better: actual <= target = good (100%), actual > target = progressively worse
+export function calcEffectivePct(actual: number, target: number, higherIsBetter = true): number {
+  if (!target || target === 0) return 0;
+  if (higherIsBetter) return calcPct(actual, target);
+  // Under/on budget → 100%; over budget → decreasing score
+  // Formula: (2*target - actual) / target * 100, capped 0-100
+  return Math.min(100, Math.max(0, Math.round(((2 * target - actual) / target) * 100)));
+}
+
 export type KpiStatus = 'achieved' | 'on_track' | 'at_risk' | 'behind';
 
 export function getKpiStatus(pct: number): { label: string; status: KpiStatus; color: string } {
@@ -246,11 +256,12 @@ export function aggregateKpi(
 ): number | null {
   const filtered = standups.filter((s) => {
     const dateStr = toDateOnly(s.standup_date);
-    // If auto_source_role is set, match it; if null/empty, default to brand_manager
     const targetRole = kpiItem.auto_source_role || 'brand_manager';
+    // owner/admin can fill in any KPI field — include them regardless of target role
+    const roleMatch = s.user_role === targetRole || ['owner', 'admin'].includes(s.user_role);
     return (
       s.session === 'sore' &&
-      s.user_role === targetRole &&
+      roleMatch &&
       dateStr >= weekStart &&
       dateStr <= weekEnd &&
       s.status === 'submitted'

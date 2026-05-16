@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const { name, category, unit, description, auto_source_role, auto_sum_formula, auto_sum_kpi_names } = await req.json();
+  const { name, category, unit, description, auto_source_role, auto_sum_formula, auto_sum_kpi_names, higher_is_better } = await req.json();
 
   if (!name || !category || !unit) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -109,6 +109,7 @@ export async function POST(req: NextRequest) {
       description,
       order_num,
       is_active: true,
+      higher_is_better: higher_is_better !== false,
       auto_aggregation: 'sum',
       auto_source_role: auto_source_role || null,
       auto_source: category === 'auto_daily_log' ? `custom_${id}` : null,
@@ -125,7 +126,7 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const { id, name, category, unit, description, auto_source_role, auto_sum_formula, auto_sum_kpi_names } = await req.json();
+  const { id, name, category, unit, description, auto_source_role, auto_sum_formula, auto_sum_kpi_names, higher_is_better } = await req.json();
 
   if (!id || !name || !category || !unit) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -145,6 +146,7 @@ export async function PUT(req: NextRequest) {
       category,
       unit,
       description,
+      higher_is_better: higher_is_better !== false,
       auto_source_role: auto_source_role || null,
       auto_source: category === 'auto_daily_log' ? `custom_${id}` : null,
       platform: platformData,

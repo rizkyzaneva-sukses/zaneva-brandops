@@ -19,6 +19,7 @@ export default function WeeklyReportPage() {
   const [narasi, setNarasi] = useState({ highlights: '', lowlights: '', root_cause: '', action_plan: '', eskalasi: '' });
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const weekOptions = getWeekOptions(2);
 
   useEffect(() => {
@@ -58,7 +59,10 @@ export default function WeeklyReportPage() {
       let isAuto = false;
 
       if (c.kpi_item.category === 'auto_daily_log') {
-        const filtered = standups.filter((s: { user_role: string; daily_log: Record<string, unknown> }) => s.user_role === c.kpi_item.auto_source_role);
+        const targetRole = c.kpi_item.auto_source_role;
+        const filtered = standups.filter((s: { user_role: string; daily_log: Record<string, unknown> }) =>
+          s.user_role === targetRole || ['owner', 'admin'].includes(s.user_role)
+        );
         const vals = filtered.map((s: { daily_log: Record<string, unknown> }) => parseFloat(String(s.daily_log?.[c.kpi_item.auto_source] || '0'))).filter((v: number) => !isNaN(v));
         if (vals.length > 0) {
           const sum = vals.reduce((a: number, b: number) => a + b, 0);
@@ -139,6 +143,21 @@ export default function WeeklyReportPage() {
     setNarasi({ highlights: report.highlights || '', lowlights: report.lowlights || '', root_cause: report.root_cause || '', action_plan: report.action_plan || '', eskalasi: report.eskalasi || '' });
     setEditingReport(report);
     setView('form');
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm('Yakin hapus Weekly Report ini? Aksi tidak bisa dibatalkan.')) return;
+    const res = await fetch(`/api/weekly-reports?id=${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      setToast('✅ Weekly Report berhasil dihapus');
+      setTimeout(() => setToast(''), 3000);
+      fetch('/api/weekly-reports').then(r => r.json()).then(setReports);
+    } else {
+      const d = await res.json();
+      setToast(`❌ ${d.error || 'Gagal menghapus'}`);
+      setTimeout(() => setToast(''), 3000);
+    }
+    setDeletingId(null);
   }
 
   async function handleSave(status: 'draft' | 'submitted') {
@@ -324,7 +343,21 @@ export default function WeeklyReportPage() {
                 <td>{r.brand_name}</td>
                 <td><span className={`badge ${STATUS_CLASS[r.status]}`}>{r.status}</span></td>
                 <td style={{ color: 'var(--text-muted)', fontSize: 13 }}>{r.submitted_by || '—'}</td>
-                <td><button className="btn btn-ghost btn-sm" onClick={() => openEdit(r)}>Edit</button></td>
+                <td>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button className="btn btn-ghost btn-sm" onClick={() => openEdit(r)}>Edit</button>
+                    {user && ['owner', 'admin', 'brand_manager'].includes(user.role) && (
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        style={{ color: '#EF4444' }}
+                        onClick={() => handleDelete(r.id)}
+                        disabled={deletingId === r.id}
+                      >
+                        🗑 Hapus
+                      </button>
+                    )}
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>

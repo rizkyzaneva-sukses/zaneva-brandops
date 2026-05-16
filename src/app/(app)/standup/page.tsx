@@ -144,7 +144,7 @@ export default function StandupPage() {
 
   const currentStandup = todayStandups.find(s => s.session === tab);
   const isSubmitted = currentStandup?.status === 'submitted';
-  const canEdit = user ? ['brand_manager', 'owner'].includes(user.role) : false;
+  const canEdit = !!user; // semua role bisa edit sprint sendiri
   const sections = user ? getStandupQuestions(user.role, tab) : [];
 
   // Daily Log Config: prioritize dynamic KPI fields from KPI Config (per role)

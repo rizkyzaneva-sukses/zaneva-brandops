@@ -3,7 +3,7 @@ import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import { sessionOptions, SessionData } from '@/lib/session';
-import { aggregateKpi, calcPct, getKpiStatus, parseNum } from '@/lib/utils';
+import { aggregateKpi, calcPct, getKpiStatus, parseNum, calcEffectivePct } from '@/lib/utils';
 
 export async function GET(req: NextRequest) {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
@@ -96,7 +96,9 @@ export async function GET(req: NextRequest) {
     }
 
     const pct = calcPct(actualValue || 0, targetValue);
-    const statusInfo = getKpiStatus(pct);
+    const higherIsBetter = kpi.higher_is_better !== false;
+    const effectivePct = calcEffectivePct(actualValue || 0, targetValue, higherIsBetter);
+    const statusInfo = getKpiStatus(effectivePct);
 
     return {
       kpi_item_id: kpi.id,
@@ -106,6 +108,8 @@ export async function GET(req: NextRequest) {
       target_value: targetValue,
       actual_value: actualValue,
       pct,
+      effective_pct: effectivePct,
+      higher_is_better: higherIsBetter,
       status: statusInfo.status,
       status_label: statusInfo.label,
       is_from_weekly_report: isFromWeeklyReport,

@@ -31,6 +31,28 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(reports);
 }
 
+export async function DELETE(req: NextRequest) {
+  const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
+  if (!session.user || !['owner', 'admin', 'brand_manager'].includes(session.user.role)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+  }
+
+  const { searchParams } = new URL(req.url);
+  const id = searchParams.get('id');
+  if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+
+  const report = await prisma.weeklyReport.findUnique({ where: { id } });
+  if (!report) return NextResponse.json({ error: 'Laporan tidak ditemukan' }, { status: 404 });
+
+  // Brand manager can only delete their own brand's reports
+  if (session.user.role === 'brand_manager' && report.brand_id !== session.user.brand_id) {
+    return NextResponse.json({ error: 'Hanya laporan brand sendiri yang bisa dihapus' }, { status: 403 });
+  }
+
+  await prisma.weeklyReport.delete({ where: { id } });
+  return NextResponse.json({ success: true });
+}
+
 export async function POST(req: NextRequest) {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
   if (!session.user || !['owner', 'admin', 'brand_manager'].includes(session.user.role)) {
