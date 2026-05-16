@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import { sessionOptions, SessionData } from '@/lib/session';
 
-// PATCH /api/users/[id] — Toggle user active status (owner only)
+// PATCH /api/users/[id] — Update user name or toggle active status (owner only)
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
         const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
@@ -15,23 +15,44 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         const { id } = await params;
         const body = await req.json();
 
-        // Prevent owner from deactivating themselves
-        if (id === session.user.id) {
-            return NextResponse.json({ error: 'Tidak bisa menonaktifkan akun sendiri' }, { status: 400 });
-        }
-
         const user = await prisma.user.findUnique({ where: { id } });
         if (!user) {
             return NextResponse.json({ error: 'User tidak ditemukan' }, { status: 404 });
         }
 
-        const is_active = typeof body.is_active === 'boolean' ? body.is_active : !user.is_active;
+        const updates: { is_active?: boolean; full_name?: string } = {};
+
+        if (typeof body.full_name === 'string') {
+            const fullName = body.full_name.trim();
+            if (!fullName) {
+                return NextResponse.json({ error: 'Nama user tidak boleh kosong' }, { status: 400 });
+            }
+            updates.full_name = fullName;
+        }
+
+        if (typeof body.is_active === 'boolean') {
+            // Prevent owner from deactivating themselves
+            if (id === session.user.id && body.is_active === false) {
+                return NextResponse.json({ error: 'Tidak bisa menonaktifkan akun sendiri' }, { status: 400 });
+            }
+            updates.is_active = body.is_active;
+        } else if (!updates.full_name) {
+            if (id === session.user.id) {
+                return NextResponse.json({ error: 'Tidak bisa menonaktifkan akun sendiri' }, { status: 400 });
+            }
+            updates.is_active = !user.is_active;
+        }
 
         const updated = await prisma.user.update({
             where: { id },
-            data: { is_active },
+            data: updates,
             select: { id: true, email: true, full_name: true, role: true, brand_id: true, brand_name: true, is_active: true },
         });
+
+        if (id === session.user.id && updated.full_name !== session.user.full_name) {
+            session.user.full_name = updated.full_name;
+            await session.save();
+        }
 
         return NextResponse.json(updated);
     } catch (error) {

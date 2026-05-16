@@ -32,6 +32,18 @@ interface KpiFeedback {
   unit: string;
 }
 
+function extractContentLog(dailyLog: Record<string, unknown>) {
+  const next: Record<string, Record<string, string>> = {};
+  for (const [key, value] of Object.entries(dailyLog || {})) {
+    const match = key.match(/^(.*)_(title|status|notes)$/);
+    if (!match) continue;
+    const [, baseKey, field] = match;
+    next[baseKey] = next[baseKey] || {};
+    next[baseKey][field] = String(value || '');
+  }
+  return next;
+}
+
 export default function StandupPage() {
   const searchParams = useSearchParams();
   const [user, setUser] = useState<User | null>(null);
@@ -47,6 +59,7 @@ export default function StandupPage() {
   const [showFeedback, setShowFeedback] = useState(false);
   const [recapOpen, setRecapOpen] = useState(false);
   const [dynamicLogFields, setDynamicLogFields] = useState<any[] | null>(null);
+  const [isEditingSubmitted, setIsEditingSubmitted] = useState(false);
 
   // Use local date (YYYY-MM-DD) to match user's actual day
   const today = (() => {
@@ -82,8 +95,13 @@ export default function StandupPage() {
       const existing = data.find((s: Standup) => s.session === currentTab);
       if (existing) {
         setAnswers(existing.answers as Record<string, string>);
-        if (currentTab === 'sore') setDailyLog(existing.daily_log as Record<string, string>);
+        if (currentTab === 'sore') {
+          const existingDailyLog = existing.daily_log as Record<string, string>;
+          setDailyLog(existingDailyLog);
+          setContentLog(extractContentLog(existingDailyLog));
+        }
       }
+      setIsEditingSubmitted(false);
     }
 
     // Yesterday standup (sore) - use local date
@@ -208,6 +226,7 @@ export default function StandupPage() {
       if (res.ok) {
         showToast(status === 'submitted' ? `Sprint ${tab} berhasil disubmit! ✅` : 'Draft tersimpan');
         fetchStandups(user.id);
+        setIsEditingSubmitted(false);
 
         // Load KPI feedback after sore submit
         if (status === 'submitted' && tab === 'sore' && user.brand_id) {
@@ -236,6 +255,19 @@ export default function StandupPage() {
 
   function handleEdit() {
     setShowFeedback(false);
+    setIsEditingSubmitted(true);
+  }
+
+  function handleCancelEdit() {
+    setIsEditingSubmitted(false);
+    if (currentStandup) {
+      setAnswers(currentStandup.answers as Record<string, string>);
+      if (tab === 'sore') {
+        const existingDailyLog = currentStandup.daily_log as Record<string, string>;
+        setDailyLog(existingDailyLog);
+        setContentLog(extractContentLog(existingDailyLog));
+      }
+    }
   }
 
   if (!user) return <div style={{ padding: 40, color: 'var(--text-muted)' }}>Memuat...</div>;
@@ -253,7 +285,7 @@ export default function StandupPage() {
         {(['pagi', 'sore'] as const).map(t => (
           <button
             key={t}
-            onClick={() => { setTab(t); setShowFeedback(false); setAnswers({}); setDailyLog({}); }}
+            onClick={() => { setTab(t); setShowFeedback(false); setIsEditingSubmitted(false); setAnswers({}); setDailyLog({}); setContentLog({}); }}
             style={{
               padding: '8px 24px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13,
               background: tab === t ? 'var(--gold)' : 'transparent',
@@ -269,8 +301,14 @@ export default function StandupPage() {
       {/* Status indicator */}
       {isSubmitted && !showFeedback && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 10, marginBottom: 20 }}>
-          <span style={{ fontSize: 14, color: 'var(--green)', fontWeight: 500 }}>✅ Sprint {tab} sudah disubmit</span>
-          {canEdit && <button className="btn btn-ghost btn-sm" onClick={handleEdit}>Edit</button>}
+          <span style={{ fontSize: 14, color: 'var(--green)', fontWeight: 500 }}>
+            {isEditingSubmitted ? `✏️ Mode revisi Sprint ${tab} aktif` : `✅ Sprint ${tab} sudah disubmit`}
+          </span>
+          {canEdit && (
+            isEditingSubmitted
+              ? <button className="btn btn-ghost btn-sm" onClick={handleCancelEdit}>Batal</button>
+              : <button className="btn btn-ghost btn-sm" onClick={handleEdit}>Edit</button>
+          )}
         </div>
       )}
 
@@ -319,7 +357,7 @@ export default function StandupPage() {
                     {field.type === 'textarea' ? (
                       <textarea
                         className="input"
-                        disabled={isSubmitted}
+                        disabled={isSubmitted && !isEditingSubmitted}
                         value={(answers[field.key] as string) || ''}
                         onChange={e => setAnswers(prev => ({ ...prev, [field.key]: e.target.value }))}
                         rows={3}
@@ -328,7 +366,7 @@ export default function StandupPage() {
                       <input
                         className="input"
                         type="text"
-                        disabled={isSubmitted}
+                        disabled={isSubmitted && !isEditingSubmitted}
                         value={(answers[field.key] as string) || ''}
                         onChange={e => setAnswers(prev => ({ ...prev, [field.key]: e.target.value }))}
                       />
@@ -350,18 +388,18 @@ export default function StandupPage() {
                   {logConfig.rows.map(row => (
                     <div key={row.key} style={{ display: 'grid', gridTemplateColumns: '120px 1fr 140px 1fr', gap: 10, alignItems: 'center' }}>
                       <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{row.label}</span>
-                      <input className="input" placeholder="Judul / nama konten" disabled={isSubmitted}
+                      <input className="input" placeholder="Judul / nama konten" disabled={isSubmitted && !isEditingSubmitted}
                         value={contentLog[row.key]?.title || ''}
                         onChange={e => setContentLog(p => ({ ...p, [row.key]: { ...p[row.key], title: e.target.value } }))}
                       />
-                      <select className="input" disabled={isSubmitted}
+                      <select className="input" disabled={isSubmitted && !isEditingSubmitted}
                         value={contentLog[row.key]?.status || ''}
                         onChange={e => setContentLog(p => ({ ...p, [row.key]: { ...p[row.key], status: e.target.value } }))}
                       >
                         <option value="">Status</option>
                         {CONTENT_STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
-                      <input className="input" placeholder="Catatan" disabled={isSubmitted}
+                      <input className="input" placeholder="Catatan" disabled={isSubmitted && !isEditingSubmitted}
                         value={contentLog[row.key]?.notes || ''}
                         onChange={e => setContentLog(p => ({ ...p, [row.key]: { ...p[row.key], notes: e.target.value } }))}
                       />
@@ -387,7 +425,7 @@ export default function StandupPage() {
                             className="input"
                             type={row.unit === 'text' ? 'text' : 'number'}
                             placeholder={row.placeholder || (row.unit === 'currency' ? 'Rp' : '0')}
-                            disabled={isSubmitted}
+                            disabled={isSubmitted && !isEditingSubmitted}
                             value={dailyLog[row.key] || ''}
                             onChange={e => setDailyLog(p => ({ ...p, [row.key]: e.target.value }))}
                             style={{ minWidth: 120 }}
@@ -398,7 +436,7 @@ export default function StandupPage() {
                             className="input"
                             type="text"
                             placeholder="Catatan (opsional)"
-                            disabled={isSubmitted}
+                            disabled={isSubmitted && !isEditingSubmitted}
                             value={dailyLog[`${row.key}_catatan`] || ''}
                             onChange={e => setDailyLog(p => ({ ...p, [`${row.key}_catatan`]: e.target.value }))}
                           />
@@ -412,13 +450,15 @@ export default function StandupPage() {
           )}
 
           {/* Action Buttons */}
-          {!isSubmitted && (
+          {(!isSubmitted || isEditingSubmitted) && (
             <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-              <button className="btn btn-secondary" onClick={() => handleSave('draft')} disabled={saving}>
-                💾 Simpan Draft
-              </button>
+              {!isEditingSubmitted && (
+                <button className="btn btn-secondary" onClick={() => handleSave('draft')} disabled={saving}>
+                  💾 Simpan Draft
+                </button>
+              )}
               <button className="btn btn-primary" onClick={() => handleSave('submitted')} disabled={saving}>
-                {saving ? 'Menyimpan...' : `✅ Submit Sprint ${tab === 'pagi' ? 'Pagi' : 'Sore'}`}
+                {saving ? 'Menyimpan...' : isEditingSubmitted ? '✅ Simpan Revisi' : `✅ Submit Sprint ${tab === 'pagi' ? 'Pagi' : 'Sore'}`}
               </button>
             </div>
           )}

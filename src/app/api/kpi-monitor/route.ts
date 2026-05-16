@@ -30,6 +30,7 @@ export async function GET(req: NextRequest) {
     where: { brand_id, is_enabled: true, kpi_item: { is_active: true } },
     include: { kpi_item: true },
   });
+  kpiConfigs.sort((a, b) => a.kpi_item.order_num - b.kpi_item.order_num);
 
   // Get weekly targets
   const targets = await prisma.kpiWeeklyTarget.findMany({

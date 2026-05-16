@@ -35,8 +35,10 @@ export default function PengaturanPage() {
   const [toast, setToast] = useState('');
   const [showBrandModal, setShowBrandModal] = useState(false);
   const [showUserModal, setShowUserModal] = useState(false);
+  const [showEditUserModal, setShowEditUserModal] = useState(false);
   const [brandForm, setBrandForm] = useState({ name: '', description: '', status: 'active' });
   const [userForm, setUserForm] = useState({ email: '', full_name: '', role: 'creative', brand_id: '', password: 'zaneva123' });
+  const [editUserForm, setEditUserForm] = useState({ id: '', full_name: '' });
   const [kpiForm, setKpiForm] = useState<{ name: string; category: string; unit: string; description: string; auto_source_role: string; auto_sum_formula?: string; auto_sum_kpi_names?: string; higher_is_better: boolean }>({ name: '', category: 'manual', unit: 'currency', description: '', auto_source_role: '', auto_sum_formula: 'all_currency', auto_sum_kpi_names: '', higher_is_better: true });
   const [editKpiId, setEditKpiId] = useState<string | null>(null);
   const [showKpiModal, setShowKpiModal] = useState(false);
@@ -283,6 +285,34 @@ export default function PengaturanPage() {
     }
   }
 
+  function openEditUserModal(user: User) {
+    setEditUserForm({ id: user.id, full_name: user.full_name });
+    setShowEditUserModal(true);
+  }
+
+  async function handleEditUserName() {
+    if (!editUserForm.id || !editUserForm.full_name.trim()) return;
+    setSaving(true);
+    const res = await fetch(`/api/users/${editUserForm.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ full_name: editUserForm.full_name.trim() }),
+    });
+    const data = await res.json().catch(() => ({ error: 'Gagal mengubah nama user' }));
+    setSaving(false);
+    if (res.ok) {
+      showToast('✅ Nama user berhasil diperbarui');
+      setUsers(prev => prev.map(u => u.id === data.id ? { ...u, full_name: data.full_name } : u));
+      if (currentUser?.id === data.id) {
+        setCurrentUser(prev => prev ? { ...prev, full_name: data.full_name } : prev);
+      }
+      setShowEditUserModal(false);
+      setEditUserForm({ id: '', full_name: '' });
+    } else {
+      showToast(`❌ ${data.error || 'Gagal mengubah nama user'}`);
+    }
+  }
+
   async function handleDeleteUser() {
     if (!deleteUser) return;
     setSaving(true);
@@ -523,6 +553,15 @@ export default function PengaturanPage() {
                             🔑 Reset PW
                           </button>
                         )}
+                        {currentUser?.role === 'owner' && (
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            style={{ fontSize: 11 }}
+                            onClick={() => openEditUserModal(u)}
+                          >
+                            ✏️ Edit Nama
+                          </button>
+                        )}
                         {currentUser?.role === 'owner' && u.id !== currentUser.id && (
                           <button
                             className="btn btn-ghost btn-sm"
@@ -577,6 +616,36 @@ export default function PengaturanPage() {
                   <button type="button" className="btn btn-secondary" onClick={() => setShowUserModal(false)}>Batal</button>
                   <button type="button" className="btn btn-primary" onClick={handleCreateUser} disabled={saving || !userForm.full_name.trim() || !userForm.email.trim()}>
                     {saving ? 'Menyimpan...' : 'Tambah User'}
+                  </button>
+                </div>
+              </div>
+            </Modal>
+          )}
+
+          {showEditUserModal && (
+            <Modal title="Edit Nama User" onClose={() => setShowEditUserModal(false)}>
+              <div style={{ display: 'grid', gap: 14 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Nama Lengkap *</label>
+                  <input
+                    className="input"
+                    value={editUserForm.full_name}
+                    onChange={e => setEditUserForm(p => ({ ...p, full_name: e.target.value }))}
+                    placeholder="Nama user"
+                  />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      setShowEditUserModal(false);
+                      setEditUserForm({ id: '', full_name: '' });
+                    }}
+                  >
+                    Batal
+                  </button>
+                  <button className="btn btn-primary" onClick={handleEditUserName} disabled={saving || !editUserForm.full_name.trim()}>
+                    {saving ? 'Menyimpan...' : 'Simpan Nama'}
                   </button>
                 </div>
               </div>
