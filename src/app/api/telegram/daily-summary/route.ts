@@ -7,6 +7,19 @@ import { sendDailySummary, formatDailySummary } from '@/lib/telegram';
 import { format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
 
+type DailySprintSession = 'pagi' | 'sore';
+
+function getWibDate() {
+    const now = new Date();
+    const wibOffsetMinutes = 7 * 60;
+    return new Date(now.getTime() + (wibOffsetMinutes + now.getTimezoneOffset()) * 60000);
+}
+
+function resolveSession(value: string | null, wibDate: Date): DailySprintSession {
+    if (value === 'pagi' || value === 'sore') return value;
+    return wibDate.getHours() < 12 ? 'pagi' : 'sore';
+}
+
 // POST - Trigger daily standup summary to Telegram
 // Can be called by cron (with ?secret=) or manually from UI (with session)
 export async function POST(req: NextRequest) {
@@ -21,9 +34,10 @@ export async function POST(req: NextRequest) {
         }
     }
 
-    const today = new Date();
+    const today = getWibDate();
     const todayStr = format(today, 'yyyy-MM-dd');
     const dateLabel = format(today, 'EEEE, d MMMM yyyy', { locale: idLocale });
+    const session = resolveSession(searchParams.get('session'), today);
 
     // Get all active brands
     const brands = await prisma.brand.findMany({ where: { status: 'active' } });
@@ -49,8 +63,8 @@ export async function POST(req: NextRequest) {
         return { name: brand.name, users };
     }).filter(b => b.users.length > 0);
 
-    const message = formatDailySummary({ date: dateLabel, brands: brandData });
+    const message = formatDailySummary({ date: dateLabel, session, brands: brandData });
     const result = await sendDailySummary(message);
 
-    return NextResponse.json({ ok: true, message_preview: message.substring(0, 200), ...result });
+    return NextResponse.json({ ok: true, session, message_preview: message.substring(0, 200), ...result });
 }

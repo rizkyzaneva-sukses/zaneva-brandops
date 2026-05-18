@@ -36,12 +36,12 @@ export async function POST(req: NextRequest) {
     if (id) {
         const updated = await prisma.telegramConfig.update({
             where: { id },
-            data: { name, bot_token, chat_id, topic_daily: topic_daily || null, topic_weekly: topic_weekly || null, is_active: is_active ?? true, schedule_daily: schedule_daily || '17:30', schedule_weekly: schedule_weekly || '18:00' },
+            data: { name, bot_token, chat_id, topic_daily: topic_daily || null, topic_weekly: topic_weekly || null, is_active: is_active ?? true, schedule_daily: schedule_daily || '09:25', schedule_weekly: schedule_weekly || '07:00' },
         });
         return NextResponse.json(updated);
     } else {
         const created = await prisma.telegramConfig.create({
-            data: { name, bot_token, chat_id, topic_daily: topic_daily || null, topic_weekly: topic_weekly || null, is_active: is_active ?? true, schedule_daily: schedule_daily || '17:30', schedule_weekly: schedule_weekly || '18:00' },
+            data: { name, bot_token, chat_id, topic_daily: topic_daily || null, topic_weekly: topic_weekly || null, is_active: is_active ?? true, schedule_daily: schedule_daily || '09:25', schedule_weekly: schedule_weekly || '07:00' },
         });
         return NextResponse.json(created);
     }

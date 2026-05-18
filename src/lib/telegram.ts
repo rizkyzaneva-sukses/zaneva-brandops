@@ -93,35 +93,45 @@ export async function sendTestMessage(configId: string): Promise<boolean> {
     return ok1;
 }
 
+type DailySprintSession = 'pagi' | 'sore';
+
 // Format daily standup summary message
 export function formatDailySummary(data: {
     date: string;
+    session: DailySprintSession;
     brands: {
         name: string;
         users: { name: string; role: string; pagi: boolean; sore: boolean }[];
     }[];
 }): string {
     const lines: string[] = [];
-    lines.push(`📋 <b>Daily Standup Summary</b>`);
+    const isMorning = data.session === 'pagi';
+    const title = isMorning ? '🌤️ <b>Report Sprint Pagi</b>' : '🌆 <b>Report Sprint Sore</b>';
+    const sessionLabel = isMorning ? 'Sprint Pagi' : 'Sprint Sore';
+
+    lines.push(title);
     lines.push(`📅 ${data.date}`);
     lines.push('');
 
-    let totalUsers = 0;
-    let totalComplete = 0;
+    let totalMissing = 0;
 
     for (const brand of data.brands) {
+        const missingUsers = brand.users.filter(u => !u[data.session]);
+        if (missingUsers.length === 0) continue;
+
         lines.push(`<b>🏷 ${brand.name}</b>`);
-        for (const u of brand.users) {
-            const pagi = u.pagi ? '✅' : '❌';
-            const sore = u.sore ? '✅' : '❌';
-            lines.push(`  ${u.name} — Pagi: ${pagi} | Sore: ${sore}`);
-            totalUsers++;
-            if (u.pagi && u.sore) totalComplete++;
+        for (const user of missingUsers) {
+            lines.push(`• ${user.name}`);
+            totalMissing++;
         }
         lines.push('');
     }
 
-    lines.push(`<b>Total:</b> ${totalComplete}/${totalUsers} orang lengkap`);
+    if (totalMissing === 0) {
+        lines.push('Alhamdulillah Done All ✅🎉');
+    } else {
+        lines.push(`Yuk dilengkapi ${sessionLabel}-nya ya teman-teman 🙏✨`);
+    }
 
     return lines.join('\n');
 }
