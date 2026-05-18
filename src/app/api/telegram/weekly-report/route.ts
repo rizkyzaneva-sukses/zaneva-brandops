@@ -6,39 +6,14 @@ import { sessionOptions, SessionData } from '@/lib/session';
 import { sendWeeklyReport, formatWeeklyPerformance } from '@/lib/telegram';
 import { getCurrentWeek } from '@/lib/utils';
 
-// Helper: get the previous period's week label
-// Periods: 1-7, 8-14, 15-21, 22-end
-// This is called on H+1 (8, 15, 22, 1) so we look back to the period that just ended
-function getPreviousPeriodWeek(): { week_label: string } {
+function getWibDate() {
     const now = new Date();
     const wibOffset = 7 * 60;
-    const wibTime = new Date(now.getTime() + (wibOffset + now.getTimezoneOffset()) * 60000);
-    const day = wibTime.getDate();
-
-    let targetDate: Date;
-
-    if (day === 1) {
-        // H+1 of last period of previous month — look at previous month's 22-end
-        targetDate = new Date(wibTime.getFullYear(), wibTime.getMonth() - 1, 25); // mid of last period
-    } else if (day === 8) {
-        // H+1 of period 1-7 — look at day 4 (mid of period 1-7)
-        targetDate = new Date(wibTime.getFullYear(), wibTime.getMonth(), 4);
-    } else if (day === 15) {
-        // H+1 of period 8-14 — look at day 11
-        targetDate = new Date(wibTime.getFullYear(), wibTime.getMonth(), 11);
-    } else if (day === 22) {
-        // H+1 of period 15-21 — look at day 18
-        targetDate = new Date(wibTime.getFullYear(), wibTime.getMonth(), 18);
-    } else {
-        // Fallback: use current week (manual trigger)
-        targetDate = wibTime;
-    }
-
-    return getCurrentWeek(targetDate);
+    return new Date(now.getTime() + (wibOffset + now.getTimezoneOffset()) * 60000);
 }
 
 // POST - Trigger weekly performance report to Telegram
-// Auto-triggered on H+1 after period ends (8, 15, 22, 1) at 07:00 WIB
+// Auto-triggered every Monday at schedule_weekly time
 export async function POST(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const cronSecret = searchParams.get('secret');
@@ -52,17 +27,13 @@ export async function POST(req: NextRequest) {
         }
     }
 
-    // Determine which period to report on
-    // If called by cron (H+1), use previous period. If manual, use current.
+    // Determine which period to report on.
+    // Cron and manual trigger use the current Zaneva period unless overridden.
     let weekLabel: string;
     if (forceWeekLabel) {
         weekLabel = forceWeekLabel;
-    } else if (cronSecret === process.env.CRON_SECRET) {
-        // Called by cron — report on previous period
-        weekLabel = getPreviousPeriodWeek().week_label;
     } else {
-        // Manual trigger — report on current period
-        weekLabel = getCurrentWeek().week_label;
+        weekLabel = getCurrentWeek(getWibDate()).week_label;
     }
 
     // Get all submitted weekly reports for this period

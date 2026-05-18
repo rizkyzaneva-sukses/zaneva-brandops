@@ -5,11 +5,13 @@ const DAILY_SPRINT_REPORTS = [
     { session: 'pagi', time: '09:25' },
     { session: 'sore', time: '18:00' },
 ] as const;
+const WEEKLY_REPORT_DAY = 1; // Monday
+const DEFAULT_WEEKLY_REPORT_TIME = '10:30';
 
 // GET - Cron endpoint that checks if it's time to send notifications
 // Called every minute by Easypanel cron: curl https://domain/api/telegram/cron?secret=YOUR_SECRET
 // Daily sprint reports: sent at 09:25 WIB for pagi and 18:00 WIB for sore
-// Weekly report: sent at schedule_weekly time on H+1 after period ends (8, 15, 22, 1)
+// Weekly report: sent every Monday at schedule_weekly time
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const secret = searchParams.get('secret');
@@ -26,10 +28,8 @@ export async function GET(req: NextRequest) {
     const currentMinute = wibTime.getMinutes();
     const currentTimeStr = `${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}`;
     const currentDay = wibTime.getDate();
-
-    // H+1 after period ends: periods end on 7, 14, 21, last day of month
-    // So H+1 = 8, 15, 22, 1 (first of next month)
-    const isWeeklyReportDay = [1, 8, 15, 22].includes(currentDay);
+    const currentWeekday = wibTime.getDay();
+    const isWeeklyReportDay = currentWeekday === WEEKLY_REPORT_DAY;
 
     // Get active configs and check schedules
     const configs = await prisma.telegramConfig.findMany({ where: { is_active: true } });
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
     let weeklyTriggered = false;
 
     for (const config of configs) {
-        // Check weekly schedule — only on H+1 after period end
+        // Check weekly schedule — Monday only
         if (config.schedule_weekly === currentTimeStr && isWeeklyReportDay && !weeklyTriggered) {
             weeklyTriggered = true;
         }
@@ -61,9 +61,18 @@ export async function GET(req: NextRequest) {
     }
 
     if (weeklyTriggered) {
+        if (configs.length === 0) {
+            results.push('weekly-report skipped: no active Telegram config');
+        }
+
         try {
-            await fetch(`${baseUrl}/api/telegram/weekly-report?secret=${process.env.CRON_SECRET}`, { method: 'POST' });
-            results.push('weekly-report sent');
+            const res = await fetch(`${baseUrl}/api/telegram/weekly-report?secret=${process.env.CRON_SECRET}`, { method: 'POST' });
+            const body = await res.json().catch(() => null) as { ok?: boolean; sent?: number; failed?: number; error?: string } | null;
+            if (res.ok && body?.ok) {
+                results.push(`weekly-report sent (${body.sent || 0} sent, ${body.failed || 0} failed)`);
+            } else {
+                results.push(`weekly-report failed: ${body?.error || res.statusText}`);
+            }
         } catch (e) {
             results.push('weekly-report failed: ' + String(e));
         }
@@ -73,10 +82,16 @@ export async function GET(req: NextRequest) {
         ok: true,
         time_wib: currentTimeStr,
         day: currentDay,
+        weekday: currentWeekday,
         is_weekly_report_day: isWeeklyReportDay,
         active_telegram_configs: configs.length,
         daily_report_schedule: DAILY_SPRINT_REPORTS,
         daily_report_session: dailyReport?.session || null,
+        weekly_report_schedule: {
+            day: 'monday',
+            default_time: DEFAULT_WEEKLY_REPORT_TIME,
+            configured_times: [...new Set(configs.map(config => config.schedule_weekly))],
+        },
         triggered: results.length > 0 ? results : 'nothing to send',
     });
 }
