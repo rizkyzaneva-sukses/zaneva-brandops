@@ -5,7 +5,17 @@ interface TelegramDestination {
     chat_id: string;
     topic_daily: string | null;
     topic_weekly: string | null;
+    daily_pic_chat_ids: string[];
 }
+
+type TelegramSendResult = {
+    sent: number;
+    failed: number;
+    group_sent: number;
+    group_failed: number;
+    pic_sent: number;
+    pic_failed: number;
+};
 
 // Send a message to a specific Telegram chat/topic
 async function sendTelegramMessage(botToken: string, chatId: string, text: string, topicId?: string | null): Promise<boolean> {
@@ -48,22 +58,50 @@ export async function getActiveDestinations(): Promise<TelegramDestination[]> {
         chat_id: c.chat_id,
         topic_daily: c.topic_daily,
         topic_weekly: c.topic_weekly,
+        daily_pic_chat_ids: [c.daily_pic_dwi_chat_id, c.daily_pic_kania_chat_id].filter(Boolean) as string[],
     }));
 }
 
 // Send daily summary to all active destinations
-export async function sendDailySummary(message: string): Promise<{ sent: number; failed: number }> {
+export async function sendDailySummary(message: string, picMessage?: string | null): Promise<TelegramSendResult> {
     const destinations = await getActiveDestinations();
     let sent = 0;
     let failed = 0;
+    let groupSent = 0;
+    let groupFailed = 0;
+    let picSent = 0;
+    let picFailed = 0;
+    const sentPicKeys = new Set<string>();
 
     for (const dest of destinations) {
         const ok = await sendTelegramMessage(dest.bot_token, dest.chat_id, message, dest.topic_daily);
-        if (ok) sent++;
-        else failed++;
+        if (ok) {
+            sent++;
+            groupSent++;
+        } else {
+            failed++;
+            groupFailed++;
+        }
+
+        if (picMessage) {
+            for (const picChatId of dest.daily_pic_chat_ids) {
+                const picKey = `${dest.bot_token}:${picChatId}`;
+                if (sentPicKeys.has(picKey)) continue;
+                sentPicKeys.add(picKey);
+
+                const picOk = await sendTelegramMessage(dest.bot_token, picChatId, picMessage);
+                if (picOk) {
+                    sent++;
+                    picSent++;
+                } else {
+                    failed++;
+                    picFailed++;
+                }
+            }
+        }
     }
 
-    return { sent, failed };
+    return { sent, failed, group_sent: groupSent, group_failed: groupFailed, pic_sent: picSent, pic_failed: picFailed };
 }
 
 // Send weekly report to all active destinations
@@ -90,7 +128,9 @@ export async function sendTestMessage(configId: string): Promise<boolean> {
 
     // Send to daily topic
     const ok1 = await sendTelegramMessage(config.bot_token, config.chat_id, testMsg, config.topic_daily);
-    return ok1;
+    const picIds = [config.daily_pic_dwi_chat_id, config.daily_pic_kania_chat_id].filter(Boolean) as string[];
+    const picResults = await Promise.all(picIds.map(picId => sendTelegramMessage(config.bot_token, picId, testMsg)));
+    return ok1 && picResults.every(Boolean);
 }
 
 type DailySprintSession = 'pagi' | 'sore';
@@ -101,7 +141,6 @@ export function formatDailySummary(data: {
     session: DailySprintSession;
     brands: {
         name: string;
-        leaders: string[];
         users: { name: string; role: string; pagi: boolean; sore: boolean }[];
     }[];
 }): string {
@@ -121,13 +160,6 @@ export function formatDailySummary(data: {
         if (missingUsers.length === 0) continue;
 
         lines.push(`<b>🏷 ${brand.name}</b>`);
-        if (brand.leaders.length > 0) {
-            lines.push(`👤 Leader: <b>${brand.leaders.join(', ')}</b>`);
-            lines.push(`Tolong bantu follow up timnya ya 🙏`);
-        } else {
-            lines.push('👤 Leader: <i>Belum diset</i>');
-        }
-        lines.push('');
         for (const user of missingUsers) {
             lines.push(`• ${user.name}`);
             totalMissing++;
@@ -140,6 +172,43 @@ export function formatDailySummary(data: {
     } else {
         lines.push(`Yuk dilengkapi ${sessionLabel}-nya ya teman-teman 🙏✨`);
     }
+
+    return lines.join('\n');
+}
+
+export function formatDailyPicReminder(data: {
+    date: string;
+    session: DailySprintSession;
+    brands: {
+        name: string;
+        users: { name: string; role: string; pagi: boolean; sore: boolean }[];
+    }[];
+}): string | null {
+    const lines: string[] = [];
+    const isMorning = data.session === 'pagi';
+    const sessionLabel = isMorning ? 'Sprint Pagi' : 'Sprint Sore';
+    let totalMissing = 0;
+
+    lines.push(`Halo Kak Dwi & Kak Kania 👋`);
+    lines.push(`Ada tim yang belum isi ${sessionLabel} ya.`);
+    lines.push(`📅 ${data.date}`);
+    lines.push('');
+
+    for (const brand of data.brands) {
+        const missingUsers = brand.users.filter(u => !u[data.session]);
+        if (missingUsers.length === 0) continue;
+
+        lines.push(`<b>🏷 ${brand.name}</b>`);
+        for (const user of missingUsers) {
+            lines.push(`• ${user.name}`);
+            totalMissing++;
+        }
+        lines.push('');
+    }
+
+    if (totalMissing === 0) return null;
+
+    lines.push(`Tolong bantu ingatkan mereka untuk isi ${sessionLabel} ya 🙏✨`);
 
     return lines.join('\n');
 }

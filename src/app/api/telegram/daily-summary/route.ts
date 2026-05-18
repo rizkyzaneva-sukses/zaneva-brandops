@@ -3,7 +3,7 @@ import { getIronSession } from 'iron-session';
 import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import { sessionOptions, SessionData } from '@/lib/session';
-import { sendDailySummary, formatDailySummary } from '@/lib/telegram';
+import { sendDailySummary, formatDailySummary, formatDailyPicReminder } from '@/lib/telegram';
 import { format } from 'date-fns';
 import { id as idLocale } from 'date-fns/locale';
 
@@ -54,20 +54,18 @@ export async function POST(req: NextRequest) {
     // Build summary data
     const brandData = brands.map(brand => {
         const brandUsers = allUsers.filter(u => u.brand_id === brand.id);
-        const leaders = brandUsers
-            .filter(u => u.role === 'brand_manager')
-            .map(u => u.full_name);
         const users = brandUsers.map(u => ({
             name: u.full_name,
             role: u.role,
             pagi: todayStandups.some(s => s.user_id === u.id && s.session === 'pagi'),
             sore: todayStandups.some(s => s.user_id === u.id && s.session === 'sore'),
         }));
-        return { name: brand.name, leaders, users };
+        return { name: brand.name, users };
     }).filter(b => b.users.length > 0);
 
     const message = formatDailySummary({ date: dateLabel, session, brands: brandData });
-    const result = await sendDailySummary(message);
+    const picMessage = formatDailyPicReminder({ date: dateLabel, session, brands: brandData });
+    const result = await sendDailySummary(message, picMessage);
 
     return NextResponse.json({ ok: true, session, message_preview: message.substring(0, 200), ...result });
 }

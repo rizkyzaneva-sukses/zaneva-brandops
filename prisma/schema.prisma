@@ -318,6 +318,8 @@ model TelegramConfig {
   topic_daily     String?
   topic_weekly    String?
   is_active       Boolean  @default(true)
+  daily_pic_dwi_chat_id   String?
+  daily_pic_kania_chat_id String?
   schedule_daily  String   @default("09:25")
   schedule_weekly String   @default("10:30")
   created_at      DateTime @default(now())

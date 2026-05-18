@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { id, name, bot_token, chat_id, topic_daily, topic_weekly, is_active, schedule_daily, schedule_weekly } = body;
+    const { id, name, bot_token, chat_id, topic_daily, topic_weekly, daily_pic_dwi_chat_id, daily_pic_kania_chat_id, is_active, schedule_daily, schedule_weekly } = body;
 
     if (!name || !bot_token || !chat_id) {
         return NextResponse.json({ error: 'name, bot_token, dan chat_id wajib diisi' }, { status: 400 });
@@ -36,12 +36,12 @@ export async function POST(req: NextRequest) {
     if (id) {
         const updated = await prisma.telegramConfig.update({
             where: { id },
-            data: { name, bot_token, chat_id, topic_daily: topic_daily || null, topic_weekly: topic_weekly || null, is_active: is_active ?? true, schedule_daily: schedule_daily || '09:25', schedule_weekly: schedule_weekly || '10:30' },
+            data: { name, bot_token, chat_id, topic_daily: topic_daily || null, topic_weekly: topic_weekly || null, daily_pic_dwi_chat_id: daily_pic_dwi_chat_id || null, daily_pic_kania_chat_id: daily_pic_kania_chat_id || null, is_active: is_active ?? true, schedule_daily: schedule_daily || '09:25', schedule_weekly: schedule_weekly || '10:30' },
         });
         return NextResponse.json(updated);
     } else {
         const created = await prisma.telegramConfig.create({
-            data: { name, bot_token, chat_id, topic_daily: topic_daily || null, topic_weekly: topic_weekly || null, is_active: is_active ?? true, schedule_daily: schedule_daily || '09:25', schedule_weekly: schedule_weekly || '10:30' },
+            data: { name, bot_token, chat_id, topic_daily: topic_daily || null, topic_weekly: topic_weekly || null, daily_pic_dwi_chat_id: daily_pic_dwi_chat_id || null, daily_pic_kania_chat_id: daily_pic_kania_chat_id || null, is_active: is_active ?? true, schedule_daily: schedule_daily || '09:25', schedule_weekly: schedule_weekly || '10:30' },
         });
         return NextResponse.json(created);
     }
