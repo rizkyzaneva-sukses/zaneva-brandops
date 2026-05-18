@@ -54,13 +54,16 @@ export async function POST(req: NextRequest) {
     // Build summary data
     const brandData = brands.map(brand => {
         const brandUsers = allUsers.filter(u => u.brand_id === brand.id);
+        const leaders = brandUsers
+            .filter(u => u.role === 'brand_manager')
+            .map(u => u.full_name);
         const users = brandUsers.map(u => ({
             name: u.full_name,
             role: u.role,
             pagi: todayStandups.some(s => s.user_id === u.id && s.session === 'pagi'),
             sore: todayStandups.some(s => s.user_id === u.id && s.session === 'sore'),
         }));
-        return { name: brand.name, users };
+        return { name: brand.name, leaders, users };
     }).filter(b => b.users.length > 0);
 
     const message = formatDailySummary({ date: dateLabel, session, brands: brandData });

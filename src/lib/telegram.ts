@@ -101,6 +101,7 @@ export function formatDailySummary(data: {
     session: DailySprintSession;
     brands: {
         name: string;
+        leaders: string[];
         users: { name: string; role: string; pagi: boolean; sore: boolean }[];
     }[];
 }): string {
@@ -120,6 +121,13 @@ export function formatDailySummary(data: {
         if (missingUsers.length === 0) continue;
 
         lines.push(`<b>🏷 ${brand.name}</b>`);
+        if (brand.leaders.length > 0) {
+            lines.push(`👤 Leader: <b>${brand.leaders.join(', ')}</b>`);
+            lines.push(`Tolong bantu follow up timnya ya 🙏`);
+        } else {
+            lines.push('👤 Leader: <i>Belum diset</i>');
+        }
+        lines.push('');
         for (const user of missingUsers) {
             lines.push(`• ${user.name}`);
             totalMissing++;
