@@ -451,7 +451,7 @@ export default function PengaturanPage() {
         : '';
       showToast(`✅ Group terkirim${picInfo}`);
     } else {
-      showToast('❌ Gagal kirim ke group — cek bot_token & chat_id');
+      showToast(`❌ Group gagal: ${data.group_error || 'unknown error'}`);
     }
   }
 

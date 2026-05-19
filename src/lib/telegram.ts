@@ -18,8 +18,10 @@ type TelegramSendResult = {
     pic_failed: number;
 };
 
+type TelegramSendOne = { ok: boolean; error?: string };
+
 // Send a message to a specific Telegram chat/topic
-async function sendTelegramMessage(botToken: string, chatId: string, text: string, topicId?: string | null): Promise<boolean> {
+async function sendTelegramMessage(botToken: string, chatId: string, text: string, topicId?: string | null): Promise<TelegramSendOne> {
     try {
         const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
         const body: Record<string, unknown> = {
@@ -38,14 +40,16 @@ async function sendTelegramMessage(botToken: string, chatId: string, text: strin
         });
 
         if (!res.ok) {
-            const err = await res.json();
-            console.error('[Telegram] Send failed:', err);
-            return false;
+            const err = await res.json() as { description?: string };
+            const errorMsg = err?.description || `HTTP ${res.status}`;
+            console.error('[Telegram] Send failed:', errorMsg);
+            return { ok: false, error: errorMsg };
         }
-        return true;
+        return { ok: true };
     } catch (error) {
-        console.error('[Telegram] Error:', error);
-        return false;
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.error('[Telegram] Error:', errorMsg);
+        return { ok: false, error: errorMsg };
     }
 }
 
@@ -79,7 +83,7 @@ export async function sendDailySummary(message: string, picMessage?: string | nu
     const sentPicKeys = new Set<string>();
 
     for (const dest of destinations) {
-        const ok = await sendTelegramMessage(dest.bot_token, dest.chat_id, message, dest.topic_daily);
+        const { ok } = await sendTelegramMessage(dest.bot_token, dest.chat_id, message, dest.topic_daily);
         if (ok) {
             sent++;
             groupSent++;
@@ -94,7 +98,7 @@ export async function sendDailySummary(message: string, picMessage?: string | nu
                 if (sentPicKeys.has(picKey)) continue;
                 sentPicKeys.add(picKey);
 
-                const picOk = await sendTelegramMessage(dest.bot_token, picChatId, picMessage);
+                const { ok: picOk } = await sendTelegramMessage(dest.bot_token, picChatId, picMessage);
                 if (picOk) {
                     sent++;
                     picSent++;
@@ -116,7 +120,7 @@ export async function sendWeeklyReport(message: string, configIds?: string[]): P
     let failed = 0;
 
     for (const dest of destinations) {
-        const ok = await sendTelegramMessage(dest.bot_token, dest.chat_id, message, dest.topic_weekly);
+        const { ok } = await sendTelegramMessage(dest.bot_token, dest.chat_id, message, dest.topic_weekly);
         if (ok) sent++;
         else failed++;
     }
@@ -125,18 +129,18 @@ export async function sendWeeklyReport(message: string, configIds?: string[]): P
 }
 
 // Send test message to a specific config — returns detailed result
-export async function sendTestMessage(configId: string): Promise<{ ok: boolean; group_ok: boolean; pic_results: { chat_id: string; ok: boolean }[] }> {
+export async function sendTestMessage(configId: string): Promise<{ ok: boolean; group_ok: boolean; group_error?: string; pic_results: { chat_id: string; ok: boolean; error?: string }[] }> {
     const config = await prisma.telegramConfig.findUnique({ where: { id: configId } });
-    if (!config) return { ok: false, group_ok: false, pic_results: [] };
+    if (!config) return { ok: false, group_ok: false, group_error: 'Config not found', pic_results: [] };
 
     const testMsg = `✅ <b>Test dari Zaneva BrandOps</b>\n\nKoneksi Telegram berhasil!\nDestinasi: ${config.name}\nWaktu: ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Bangkok' })}`;
 
-    const group_ok = await sendTelegramMessage(config.bot_token, config.chat_id, testMsg, config.topic_daily);
+    const groupResult = await sendTelegramMessage(config.bot_token, config.chat_id, testMsg, config.topic_daily);
     const picIds = [config.daily_pic_dwi_chat_id, config.daily_pic_kania_chat_id].filter(Boolean) as string[];
-    const picOks = await Promise.all(picIds.map(picId => sendTelegramMessage(config.bot_token, picId, testMsg)));
-    const pic_results = picIds.map((chat_id, i) => ({ chat_id, ok: picOks[i] }));
+    const picResults = await Promise.all(picIds.map(picId => sendTelegramMessage(config.bot_token, picId, testMsg)));
+    const pic_results = picIds.map((chat_id, i) => ({ chat_id, ok: picResults[i].ok, error: picResults[i].error }));
 
-    return { ok: group_ok, group_ok, pic_results };
+    return { ok: groupResult.ok, group_ok: groupResult.ok, group_error: groupResult.error, pic_results };
 }
 
 type DailySprintSession = 'pagi' | 'sore';
