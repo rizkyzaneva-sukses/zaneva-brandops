@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     // Get today's standups
     const todayStandups = await prisma.standup.findMany({
         where: {
-            standup_date: { gte: new Date(todayStr + 'T00:00:00'), lte: new Date(todayStr + 'T23:59:59') },
+            standup_date: { gte: new Date(todayStr + 'T00:00:00.000Z'), lte: new Date(todayStr + 'T23:59:59.999Z') },
             status: 'submitted',
         },
     });

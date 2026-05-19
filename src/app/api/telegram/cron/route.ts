@@ -89,6 +89,20 @@ export async function GET(req: NextRequest) {
         ? configuredTolerance
         : DEFAULT_CRON_TOLERANCE_MINUTES;
 
+    // Clean up stale failed delivery logs from today so they can be retried
+    await prisma.telegramDeliveryLog.deleteMany({
+        where: {
+            delivery_key: { startsWith: `daily:${currentDateKey}:` },
+            result: { path: ['status'], equals: 'failed' },
+        },
+    });
+    await prisma.telegramDeliveryLog.deleteMany({
+        where: {
+            delivery_key: { startsWith: `weekly:${currentDateKey}:` },
+            result: { path: ['status'], equals: 'failed' },
+        },
+    });
+
     // Get active configs and check schedules
     const configs = await prisma.telegramConfig.findMany({ where: { is_active: true } });
 
@@ -144,13 +158,17 @@ export async function GET(req: NextRequest) {
         try {
             const res = await fetch(`${baseUrl}/api/telegram/daily-summary?session=${session}&config_ids=${configIds.join(',')}&secret=${process.env.CRON_SECRET}`, { method: 'POST' });
             const body = await res.json().catch(() => null) as Record<string, unknown> | null;
-            await Promise.all(dailyDeliveryKeysBySession[session].map(deliveryKey => markDelivery(deliveryKey, {
-                status: res.ok && body?.ok ? 'sent' : 'failed',
-                response: body,
-            } as Prisma.InputJsonValue)));
-            results.push(res.ok && body?.ok
-                ? `daily-summary ${session} sent (${configIds.length} destination${configIds.length > 1 ? 's' : ''})`
-                : `daily-summary ${session} failed: ${String(body?.error || res.statusText)}`);
+            const success = res.ok && body?.ok;
+            if (success) {
+                await Promise.all(dailyDeliveryKeysBySession[session].map(deliveryKey => markDelivery(deliveryKey, {
+                    status: 'sent',
+                    response: body,
+                } as Prisma.InputJsonValue)));
+                results.push(`daily-summary ${session} sent (${configIds.length} destination${configIds.length > 1 ? 's' : ''})`);
+            } else {
+                await releaseDeliveries(dailyDeliveryKeysBySession[session]);
+                results.push(`daily-summary ${session} failed: ${String(body?.error || res.statusText)}`);
+            }
         } catch (e) {
             await releaseDeliveries(dailyDeliveryKeysBySession[session]);
             results.push(`daily-summary ${session} failed: ` + String(e));
@@ -163,13 +181,15 @@ export async function GET(req: NextRequest) {
         try {
             const res = await fetch(`${baseUrl}/api/telegram/weekly-report?config_ids=${configIds.join(',')}&secret=${process.env.CRON_SECRET}`, { method: 'POST' });
             const body = await res.json().catch(() => null) as { ok?: boolean; sent?: number; failed?: number; error?: string } | null;
-            await Promise.all(weeklyDeliveryKeys.map(deliveryKey => markDelivery(deliveryKey, {
-                status: res.ok && body?.ok ? 'sent' : 'failed',
-                response: body,
-            } as Prisma.InputJsonValue)));
-            if (res.ok && body?.ok) {
-                results.push(`weekly-report sent (${body.sent || 0} sent, ${body.failed || 0} failed)`);
+            const success = res.ok && body?.ok;
+            if (success) {
+                await Promise.all(weeklyDeliveryKeys.map(deliveryKey => markDelivery(deliveryKey, {
+                    status: 'sent',
+                    response: body,
+                } as Prisma.InputJsonValue)));
+                results.push(`weekly-report sent (${body?.sent || 0} sent, ${body?.failed || 0} failed)`);
             } else {
+                await releaseDeliveries(weeklyDeliveryKeys);
                 results.push(`weekly-report failed: ${body?.error || res.statusText}`);
             }
         } catch (e) {
