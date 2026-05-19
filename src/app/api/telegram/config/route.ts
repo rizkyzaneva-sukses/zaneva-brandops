@@ -4,6 +4,7 @@ import { cookies } from 'next/headers';
 import { prisma } from '@/lib/prisma';
 import { sessionOptions, SessionData } from '@/lib/session';
 import { sendTestMessage } from '@/lib/telegram';
+import { parseDailySchedule, serializeDailySchedule } from '@/lib/telegramSchedule';
 
 // GET - List all telegram configs
 export async function GET() {
@@ -33,15 +34,17 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'name, bot_token, dan chat_id wajib diisi' }, { status: 400 });
     }
 
+    const normalizedScheduleDaily = serializeDailySchedule(parseDailySchedule(schedule_daily));
+
     if (id) {
         const updated = await prisma.telegramConfig.update({
             where: { id },
-            data: { name, bot_token, chat_id, topic_daily: topic_daily || null, topic_weekly: topic_weekly || null, daily_pic_dwi_chat_id: daily_pic_dwi_chat_id || null, daily_pic_kania_chat_id: daily_pic_kania_chat_id || null, is_active: is_active ?? true, schedule_daily: schedule_daily || '09:25', schedule_weekly: schedule_weekly || '10:30' },
+            data: { name, bot_token, chat_id, topic_daily: topic_daily || null, topic_weekly: topic_weekly || null, daily_pic_dwi_chat_id: daily_pic_dwi_chat_id || null, daily_pic_kania_chat_id: daily_pic_kania_chat_id || null, is_active: is_active ?? true, schedule_daily: normalizedScheduleDaily, schedule_weekly: schedule_weekly || '10:30' },
         });
         return NextResponse.json(updated);
     } else {
         const created = await prisma.telegramConfig.create({
-            data: { name, bot_token, chat_id, topic_daily: topic_daily || null, topic_weekly: topic_weekly || null, daily_pic_dwi_chat_id: daily_pic_dwi_chat_id || null, daily_pic_kania_chat_id: daily_pic_kania_chat_id || null, is_active: is_active ?? true, schedule_daily: schedule_daily || '09:25', schedule_weekly: schedule_weekly || '10:30' },
+            data: { name, bot_token, chat_id, topic_daily: topic_daily || null, topic_weekly: topic_weekly || null, daily_pic_dwi_chat_id: daily_pic_dwi_chat_id || null, daily_pic_kania_chat_id: daily_pic_kania_chat_id || null, is_active: is_active ?? true, schedule_daily: normalizedScheduleDaily, schedule_weekly: schedule_weekly || '10:30' },
         });
         return NextResponse.json(created);
     }

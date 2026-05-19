@@ -1,16 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { DailySprintSession, DEFAULT_DAILY_SCHEDULE, parseDailySchedule } from '@/lib/telegramSchedule';
 
-const DAILY_SPRINT_REPORTS = [
-    { session: 'pagi', time: '09:25' },
-    { session: 'sore', time: '18:00' },
-] as const;
 const WEEKLY_REPORT_DAY = 1; // Monday
 const DEFAULT_WEEKLY_REPORT_TIME = '10:30';
 
 // GET - Cron endpoint that checks if it's time to send notifications
 // Called every minute by Easypanel cron: curl https://domain/api/telegram/cron?secret=YOUR_SECRET
-// Daily sprint reports: sent at 09:25 WIB for pagi and 18:00 WIB for sore
+// Daily sprint reports: sent at each destination's configured WIB schedule
 // Weekly report: sent every Monday at schedule_weekly time
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
@@ -34,10 +31,21 @@ export async function GET(req: NextRequest) {
     // Get active configs and check schedules
     const configs = await prisma.telegramConfig.findMany({ where: { is_active: true } });
 
-    const dailyReport = DAILY_SPRINT_REPORTS.find(report => report.time === currentTimeStr);
+    const dailyConfigIdsBySession: Record<DailySprintSession, Set<string>> = {
+        pagi: new Set<string>(),
+        sore: new Set<string>(),
+    };
     let weeklyTriggered = false;
 
     for (const config of configs) {
+        const dailySchedule = parseDailySchedule(config.schedule_daily);
+        if (dailySchedule.pagi === currentTimeStr) {
+            dailyConfigIdsBySession.pagi.add(config.id);
+        }
+        if (dailySchedule.sore === currentTimeStr) {
+            dailyConfigIdsBySession.sore.add(config.id);
+        }
+
         // Check weekly schedule — Monday only
         if (config.schedule_weekly === currentTimeStr && isWeeklyReportDay && !weeklyTriggered) {
             weeklyTriggered = true;
@@ -46,17 +54,21 @@ export async function GET(req: NextRequest) {
 
     const results: string[] = [];
     const baseUrl = req.nextUrl.origin;
+    const defaultDailySession = Object.entries(DEFAULT_DAILY_SCHEDULE).find(([, time]) => time === currentTimeStr)?.[0] as DailySprintSession | undefined;
 
-    if (dailyReport && configs.length === 0) {
-        results.push(`daily-summary ${dailyReport.session} skipped: no active Telegram config`);
+    if (defaultDailySession && configs.length === 0) {
+        results.push(`daily-summary ${defaultDailySession} skipped: no active Telegram config`);
     }
 
-    if (dailyReport && configs.length > 0) {
+    for (const session of ['pagi', 'sore'] as const) {
+        const configIds = [...dailyConfigIdsBySession[session]];
+        if (configIds.length === 0) continue;
+
         try {
-            await fetch(`${baseUrl}/api/telegram/daily-summary?session=${dailyReport.session}&secret=${process.env.CRON_SECRET}`, { method: 'POST' });
-            results.push(`daily-summary ${dailyReport.session} sent`);
+            await fetch(`${baseUrl}/api/telegram/daily-summary?session=${session}&config_ids=${configIds.join(',')}&secret=${process.env.CRON_SECRET}`, { method: 'POST' });
+            results.push(`daily-summary ${session} sent (${configIds.length} destination${configIds.length > 1 ? 's' : ''})`);
         } catch (e) {
-            results.push(`daily-summary ${dailyReport.session} failed: ` + String(e));
+            results.push(`daily-summary ${session} failed: ` + String(e));
         }
     }
 
@@ -85,8 +97,12 @@ export async function GET(req: NextRequest) {
         weekday: currentWeekday,
         is_weekly_report_day: isWeeklyReportDay,
         active_telegram_configs: configs.length,
-        daily_report_schedule: DAILY_SPRINT_REPORTS,
-        daily_report_session: dailyReport?.session || null,
+        daily_report_schedule: configs.map(config => ({
+            config_id: config.id,
+            name: config.name,
+            ...parseDailySchedule(config.schedule_daily),
+        })),
+        daily_report_sessions: (['pagi', 'sore'] as const).filter(session => dailyConfigIdsBySession[session].size > 0),
         weekly_report_schedule: {
             day: 'monday',
             default_time: DEFAULT_WEEKLY_REPORT_TIME,

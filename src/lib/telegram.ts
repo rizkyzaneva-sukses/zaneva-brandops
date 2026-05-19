@@ -1,6 +1,7 @@
 import { prisma } from './prisma';
 
 interface TelegramDestination {
+    id: string;
     bot_token: string;
     chat_id: string;
     topic_daily: string | null;
@@ -49,11 +50,15 @@ async function sendTelegramMessage(botToken: string, chatId: string, text: strin
 }
 
 // Get all active Telegram destinations
-export async function getActiveDestinations(): Promise<TelegramDestination[]> {
+export async function getActiveDestinations(configIds?: string[]): Promise<TelegramDestination[]> {
     const configs = await prisma.telegramConfig.findMany({
-        where: { is_active: true },
+        where: {
+            is_active: true,
+            ...(configIds?.length ? { id: { in: configIds } } : {}),
+        },
     });
     return configs.map(c => ({
+        id: c.id,
         bot_token: c.bot_token,
         chat_id: c.chat_id,
         topic_daily: c.topic_daily,
@@ -62,9 +67,9 @@ export async function getActiveDestinations(): Promise<TelegramDestination[]> {
     }));
 }
 
-// Send daily summary to all active destinations
-export async function sendDailySummary(message: string, picMessage?: string | null): Promise<TelegramSendResult> {
-    const destinations = await getActiveDestinations();
+// Send daily summary to all active destinations, or a scheduled subset.
+export async function sendDailySummary(message: string, picMessage?: string | null, configIds?: string[]): Promise<TelegramSendResult> {
+    const destinations = await getActiveDestinations(configIds);
     let sent = 0;
     let failed = 0;
     let groupSent = 0;

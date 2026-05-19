@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
     const todayStr = format(today, 'yyyy-MM-dd');
     const dateLabel = format(today, 'EEEE, d MMMM yyyy', { locale: idLocale });
     const session = resolveSession(searchParams.get('session'), today);
+    const configIds = searchParams.get('config_ids')?.split(',').map(id => id.trim()).filter(Boolean);
 
     // Get all active brands
     const brands = await prisma.brand.findMany({ where: { status: 'active' } });
@@ -65,7 +66,7 @@ export async function POST(req: NextRequest) {
 
     const message = formatDailySummary({ date: dateLabel, session, brands: brandData });
     const picMessage = formatDailyPicReminder({ date: dateLabel, session, brands: brandData });
-    const result = await sendDailySummary(message, picMessage);
+    const result = await sendDailySummary(message, picMessage, configIds);
 
     return NextResponse.json({ ok: true, session, message_preview: message.substring(0, 200), ...result });
 }
