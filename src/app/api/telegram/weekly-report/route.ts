@@ -73,5 +73,5 @@ export async function POST(req: NextRequest) {
     const message = formatWeeklyPerformance({ week_label: weekLabel, brands: brandPerformance });
     const result = await sendWeeklyReport(message, configIds);
 
-    return NextResponse.json({ ok: true, week_label: weekLabel, message_preview: message.substring(0, 200), ...result });
+    return NextResponse.json({ ok: result.sent > 0, week_label: weekLabel, message_preview: message.substring(0, 200), ...result });
 }

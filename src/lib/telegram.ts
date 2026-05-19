@@ -124,18 +124,19 @@ export async function sendWeeklyReport(message: string, configIds?: string[]): P
     return { sent, failed };
 }
 
-// Send test message to a specific config
-export async function sendTestMessage(configId: string): Promise<boolean> {
+// Send test message to a specific config — returns detailed result
+export async function sendTestMessage(configId: string): Promise<{ ok: boolean; group_ok: boolean; pic_results: { chat_id: string; ok: boolean }[] }> {
     const config = await prisma.telegramConfig.findUnique({ where: { id: configId } });
-    if (!config) return false;
+    if (!config) return { ok: false, group_ok: false, pic_results: [] };
 
     const testMsg = `✅ <b>Test dari Zaneva BrandOps</b>\n\nKoneksi Telegram berhasil!\nDestinasi: ${config.name}\nWaktu: ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Bangkok' })}`;
 
-    // Send to daily topic
-    const ok1 = await sendTelegramMessage(config.bot_token, config.chat_id, testMsg, config.topic_daily);
+    const group_ok = await sendTelegramMessage(config.bot_token, config.chat_id, testMsg, config.topic_daily);
     const picIds = [config.daily_pic_dwi_chat_id, config.daily_pic_kania_chat_id].filter(Boolean) as string[];
-    const picResults = await Promise.all(picIds.map(picId => sendTelegramMessage(config.bot_token, picId, testMsg)));
-    return ok1 && picResults.every(Boolean);
+    const picOks = await Promise.all(picIds.map(picId => sendTelegramMessage(config.bot_token, picId, testMsg)));
+    const pic_results = picIds.map((chat_id, i) => ({ chat_id, ok: picOks[i] }));
+
+    return { ok: group_ok, group_ok, pic_results };
 }
 
 type DailySprintSession = 'pagi' | 'sore';

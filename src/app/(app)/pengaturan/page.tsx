@@ -445,7 +445,14 @@ export default function PengaturanPage() {
     });
     const data = await res.json();
     setTelegramSending(null);
-    showToast(data.ok ? '✅ Test message terkirim!' : '❌ Gagal mengirim test');
+    if (data.group_ok) {
+      const picInfo = data.pic_results?.length
+        ? ` | PIC: ${data.pic_results.map((p: { ok: boolean }) => p.ok ? '✅' : '❌').join(' ')}`
+        : '';
+      showToast(`✅ Group terkirim${picInfo}`);
+    } else {
+      showToast('❌ Gagal kirim ke group — cek bot_token & chat_id');
+    }
   }
 
   async function handleTriggerDaily(session: 'pagi' | 'sore') {

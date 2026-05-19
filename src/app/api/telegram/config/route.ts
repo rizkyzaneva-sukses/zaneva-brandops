@@ -76,6 +76,6 @@ export async function PATCH(req: NextRequest) {
     const { id } = body;
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
-    const ok = await sendTestMessage(id);
-    return NextResponse.json({ ok });
+    const result = await sendTestMessage(id);
+    return NextResponse.json(result);
 }

@@ -68,5 +68,6 @@ export async function POST(req: NextRequest) {
     const picMessage = formatDailyPicReminder({ date: dateLabel, session, brands: brandData });
     const result = await sendDailySummary(message, picMessage, configIds);
 
-    return NextResponse.json({ ok: true, session, message_preview: message.substring(0, 200), ...result });
+    const ok = result.group_sent > 0 || (result.group_sent === 0 && result.group_failed === 0);
+    return NextResponse.json({ ok, session, message_preview: message.substring(0, 200), ...result });
 }
