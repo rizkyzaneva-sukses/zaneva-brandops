@@ -65,7 +65,7 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ ok: true });
 }
 
-// PATCH - Test send
+// PATCH - Test send + diagnose
 export async function PATCH(req: NextRequest) {
     const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
     if (!session.user || !['owner', 'admin'].includes(session.user.role)) {
@@ -76,6 +76,32 @@ export async function PATCH(req: NextRequest) {
     const { id } = body;
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
+    const config = await prisma.telegramConfig.findUnique({ where: { id } });
+    if (!config) return NextResponse.json({ error: 'Config not found' }, { status: 404 });
+
+    // Diagnose: check bot identity and chat access before sending
+    let botName = '';
+    let chatTitle = '';
+    let chatError = '';
+
+    try {
+        const meRes = await fetch(`https://api.telegram.org/bot${config.bot_token}/getMe`);
+        const meData = await meRes.json() as { ok: boolean; result?: { username?: string; first_name?: string } };
+        if (meData.ok && meData.result) {
+            botName = meData.result.first_name || meData.result.username || '';
+        }
+    } catch { /* ignore */ }
+
+    try {
+        const chatRes = await fetch(`https://api.telegram.org/bot${config.bot_token}/getChat?chat_id=${config.chat_id}`);
+        const chatData = await chatRes.json() as { ok: boolean; result?: { title?: string }; description?: string };
+        if (chatData.ok && chatData.result) {
+            chatTitle = chatData.result.title || '';
+        } else {
+            chatError = (chatData as { description?: string }).description || 'Chat not accessible';
+        }
+    } catch { /* ignore */ }
+
     const result = await sendTestMessage(id);
-    return NextResponse.json(result);
+    return NextResponse.json({ ...result, bot_name: botName, chat_title: chatTitle, chat_error: chatError });
 }

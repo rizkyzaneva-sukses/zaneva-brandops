@@ -445,13 +445,15 @@ export default function PengaturanPage() {
     });
     const data = await res.json();
     setTelegramSending(null);
+    const botInfo = data.bot_name ? ` [Bot: ${data.bot_name}]` : '';
+    const chatInfo = data.chat_title ? ` [Chat: ${data.chat_title}]` : data.chat_error ? ` [Chat: ${data.chat_error}]` : '';
     if (data.group_ok) {
       const picInfo = data.pic_results?.length
         ? ` | PIC: ${data.pic_results.map((p: { ok: boolean }) => p.ok ? '✅' : '❌').join(' ')}`
         : '';
-      showToast(`✅ Group terkirim${picInfo}`);
+      showToast(`✅ Terkirim${picInfo}${botInfo}`);
     } else {
-      showToast(`❌ Group gagal: ${data.group_error || 'unknown error'}`);
+      showToast(`❌ ${data.group_error || 'Gagal'}${botInfo}${chatInfo}`);
     }
   }
 
