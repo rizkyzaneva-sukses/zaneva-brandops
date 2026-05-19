@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const cronSecret = searchParams.get('secret');
     const forceWeekLabel = searchParams.get('week_label'); // optional override
+    const configIds = searchParams.get('config_ids')?.split(',').map(id => id.trim()).filter(Boolean);
 
     // Auth: cron secret OR session
     if (cronSecret !== process.env.CRON_SECRET) {
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
     }
 
     const message = formatWeeklyPerformance({ week_label: weekLabel, brands: brandPerformance });
-    const result = await sendWeeklyReport(message);
+    const result = await sendWeeklyReport(message, configIds);
 
     return NextResponse.json({ ok: true, week_label: weekLabel, message_preview: message.substring(0, 200), ...result });
 }

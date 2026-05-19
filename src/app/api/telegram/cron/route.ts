@@ -1,9 +1,64 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { DailySprintSession, DEFAULT_DAILY_SCHEDULE, parseDailySchedule } from '@/lib/telegramSchedule';
 
 const WEEKLY_REPORT_DAY = 1; // Monday
 const DEFAULT_WEEKLY_REPORT_TIME = '10:30';
+const DEFAULT_CRON_TOLERANCE_MINUTES = 10;
+
+function parseTimeToMinutes(time: string) {
+    const [hour = '0', minute = '0'] = time.split(':');
+    return Number(hour) * 60 + Number(minute);
+}
+
+function isDueWithinWindow(scheduleTime: string, currentMinutes: number, toleranceMinutes: number) {
+    const diff = currentMinutes - parseTimeToMinutes(scheduleTime);
+    return diff >= 0 && diff <= toleranceMinutes;
+}
+
+function getWibDateKey(wibTime: Date) {
+    return `${wibTime.getFullYear()}-${String(wibTime.getMonth() + 1).padStart(2, '0')}-${String(wibTime.getDate()).padStart(2, '0')}`;
+}
+
+function getScheduledUtcFromWib(wibTime: Date, time: string) {
+    const [hour = '0', minute = '0'] = time.split(':');
+    return new Date(Date.UTC(wibTime.getFullYear(), wibTime.getMonth(), wibTime.getDate(), Number(hour) - 7, Number(minute), 0, 0));
+}
+
+async function reserveDelivery(deliveryKey: string, deliveryType: string, configIds: string[], scheduledFor: Date) {
+    try {
+        await prisma.telegramDeliveryLog.create({
+            data: {
+                delivery_key: deliveryKey,
+                delivery_type: deliveryType,
+                telegram_config_ids: configIds.join(','),
+                scheduled_for: scheduledFor,
+                result: { status: 'reserved' },
+            },
+        });
+        return true;
+    } catch (error) {
+        if (typeof error === 'object' && error && 'code' in error && (error as { code?: string }).code === 'P2002') {
+            return false;
+        }
+        throw error;
+    }
+}
+
+async function markDelivery(deliveryKey: string, result: Prisma.InputJsonValue) {
+    await prisma.telegramDeliveryLog.update({
+        where: { delivery_key: deliveryKey },
+        data: { result },
+    });
+}
+
+async function releaseDeliveries(deliveryKeys: string[]) {
+    if (deliveryKeys.length === 0) return;
+    await prisma.telegramDeliveryLog.deleteMany({
+        where: { delivery_key: { in: deliveryKeys } },
+    });
+}
 
 // GET - Cron endpoint that checks if it's time to send notifications
 // Called every minute by Easypanel cron: curl https://domain/api/telegram/cron?secret=YOUR_SECRET
@@ -26,7 +81,13 @@ export async function GET(req: NextRequest) {
     const currentTimeStr = `${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}`;
     const currentDay = wibTime.getDate();
     const currentWeekday = wibTime.getDay();
+    const currentMinutes = currentHour * 60 + currentMinute;
+    const currentDateKey = getWibDateKey(wibTime);
     const isWeeklyReportDay = currentWeekday === WEEKLY_REPORT_DAY;
+    const configuredTolerance = Number(process.env.CRON_TOLERANCE_MINUTES || DEFAULT_CRON_TOLERANCE_MINUTES);
+    const toleranceMinutes = Number.isFinite(configuredTolerance) && configuredTolerance >= 0
+        ? configuredTolerance
+        : DEFAULT_CRON_TOLERANCE_MINUTES;
 
     // Get active configs and check schedules
     const configs = await prisma.telegramConfig.findMany({ where: { is_active: true } });
@@ -35,20 +96,36 @@ export async function GET(req: NextRequest) {
         pagi: new Set<string>(),
         sore: new Set<string>(),
     };
-    let weeklyTriggered = false;
+    const dailyDeliveryKeysBySession: Record<DailySprintSession, string[]> = {
+        pagi: [],
+        sore: [],
+    };
+    const weeklyConfigIds = new Set<string>();
+    const weeklyDeliveryKeys: string[] = [];
 
     for (const config of configs) {
         const dailySchedule = parseDailySchedule(config.schedule_daily);
-        if (dailySchedule.pagi === currentTimeStr) {
-            dailyConfigIdsBySession.pagi.add(config.id);
-        }
-        if (dailySchedule.sore === currentTimeStr) {
-            dailyConfigIdsBySession.sore.add(config.id);
+
+        for (const session of ['pagi', 'sore'] as const) {
+            const scheduledTime = dailySchedule[session];
+            if (!isDueWithinWindow(scheduledTime, currentMinutes, toleranceMinutes)) continue;
+
+            const deliveryKey = `daily:${currentDateKey}:${session}:${config.id}`;
+            const reserved = await reserveDelivery(deliveryKey, 'daily-summary', [config.id], getScheduledUtcFromWib(wibTime, scheduledTime));
+            if (!reserved) continue;
+
+            dailyConfigIdsBySession[session].add(config.id);
+            dailyDeliveryKeysBySession[session].push(deliveryKey);
         }
 
         // Check weekly schedule — Monday only
-        if (config.schedule_weekly === currentTimeStr && isWeeklyReportDay && !weeklyTriggered) {
-            weeklyTriggered = true;
+        if (isWeeklyReportDay && isDueWithinWindow(config.schedule_weekly, currentMinutes, toleranceMinutes)) {
+            const deliveryKey = `weekly:${currentDateKey}:${config.id}`;
+            const reserved = await reserveDelivery(deliveryKey, 'weekly-report', [config.id], getScheduledUtcFromWib(wibTime, config.schedule_weekly));
+            if (!reserved) continue;
+
+            weeklyConfigIds.add(config.id);
+            weeklyDeliveryKeys.push(deliveryKey);
         }
     }
 
@@ -65,27 +142,38 @@ export async function GET(req: NextRequest) {
         if (configIds.length === 0) continue;
 
         try {
-            await fetch(`${baseUrl}/api/telegram/daily-summary?session=${session}&config_ids=${configIds.join(',')}&secret=${process.env.CRON_SECRET}`, { method: 'POST' });
-            results.push(`daily-summary ${session} sent (${configIds.length} destination${configIds.length > 1 ? 's' : ''})`);
+            const res = await fetch(`${baseUrl}/api/telegram/daily-summary?session=${session}&config_ids=${configIds.join(',')}&secret=${process.env.CRON_SECRET}`, { method: 'POST' });
+            const body = await res.json().catch(() => null) as Record<string, unknown> | null;
+            await Promise.all(dailyDeliveryKeysBySession[session].map(deliveryKey => markDelivery(deliveryKey, {
+                status: res.ok && body?.ok ? 'sent' : 'failed',
+                response: body,
+            } as Prisma.InputJsonValue)));
+            results.push(res.ok && body?.ok
+                ? `daily-summary ${session} sent (${configIds.length} destination${configIds.length > 1 ? 's' : ''})`
+                : `daily-summary ${session} failed: ${String(body?.error || res.statusText)}`);
         } catch (e) {
+            await releaseDeliveries(dailyDeliveryKeysBySession[session]);
             results.push(`daily-summary ${session} failed: ` + String(e));
         }
     }
 
-    if (weeklyTriggered) {
-        if (configs.length === 0) {
-            results.push('weekly-report skipped: no active Telegram config');
-        }
+    if (weeklyConfigIds.size > 0) {
+        const configIds = [...weeklyConfigIds];
 
         try {
-            const res = await fetch(`${baseUrl}/api/telegram/weekly-report?secret=${process.env.CRON_SECRET}`, { method: 'POST' });
+            const res = await fetch(`${baseUrl}/api/telegram/weekly-report?config_ids=${configIds.join(',')}&secret=${process.env.CRON_SECRET}`, { method: 'POST' });
             const body = await res.json().catch(() => null) as { ok?: boolean; sent?: number; failed?: number; error?: string } | null;
+            await Promise.all(weeklyDeliveryKeys.map(deliveryKey => markDelivery(deliveryKey, {
+                status: res.ok && body?.ok ? 'sent' : 'failed',
+                response: body,
+            } as Prisma.InputJsonValue)));
             if (res.ok && body?.ok) {
                 results.push(`weekly-report sent (${body.sent || 0} sent, ${body.failed || 0} failed)`);
             } else {
                 results.push(`weekly-report failed: ${body?.error || res.statusText}`);
             }
         } catch (e) {
+            await releaseDeliveries(weeklyDeliveryKeys);
             results.push('weekly-report failed: ' + String(e));
         }
     }
@@ -95,6 +183,7 @@ export async function GET(req: NextRequest) {
         time_wib: currentTimeStr,
         day: currentDay,
         weekday: currentWeekday,
+        tolerance_minutes: toleranceMinutes,
         is_weekly_report_day: isWeeklyReportDay,
         active_telegram_configs: configs.length,
         daily_report_schedule: configs.map(config => ({

@@ -110,8 +110,8 @@ export async function sendDailySummary(message: string, picMessage?: string | nu
 }
 
 // Send weekly report to all active destinations
-export async function sendWeeklyReport(message: string): Promise<{ sent: number; failed: number }> {
-    const destinations = await getActiveDestinations();
+export async function sendWeeklyReport(message: string, configIds?: string[]): Promise<{ sent: number; failed: number }> {
+    const destinations = await getActiveDestinations(configIds);
     let sent = 0;
     let failed = 0;
 

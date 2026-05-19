@@ -325,3 +325,16 @@ model TelegramConfig {
   created_at      DateTime @default(now())
   updated_at      DateTime @updatedAt
 }
+
+model TelegramDeliveryLog {
+  id                  String   @id @default(cuid())
+  delivery_key        String   @unique
+  delivery_type       String
+  telegram_config_ids String   @default("")
+  scheduled_for       DateTime
+  result              Json     @default("{}")
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+
+  @@index([delivery_type, scheduled_for])
+}
