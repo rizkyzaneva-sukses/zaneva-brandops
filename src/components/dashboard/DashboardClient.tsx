@@ -1,9 +1,10 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { SessionUser } from '@/lib/session';
-import { formatDateShort } from '@/lib/utils';
+import { formatDateShort, getCurrentWeek } from '@/lib/utils';
 
 interface Props {
   user: SessionUser;
@@ -171,18 +172,18 @@ function StatusDot({ label, done }: { label: string; done: boolean }) {
 }
 
 function KpiWidget({ brandId, weekLabel }: { brandId: string; weekLabel: string }) {
-  // Client-side fetch for KPI widget
-  const [kpis, setKpis] = useState<{ kpi_name: string; pct: number; status: string; actual_value: number | null; target_value: number; unit: string }[]>([]);
+  const [kpis, setKpis] = useState<{ kpi_name: string; pct: number; status: string; actual_value: number | null; target_value: number; unit: string; effective_pct?: number }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [frozen, setFrozen] = useState(false);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useState(() => {
-    const week = getCurrentWeek(new Date());
+  useEffect(() => {
+    setLoading(true);
+    const week = getCurrentWeek();
     fetch(`/api/kpi-monitor?brand_id=${brandId}&week_start=${week.week_start}&week_end=${week.week_end}&week_label=${encodeURIComponent(weekLabel)}`)
       .then(r => r.json())
-      .then(d => { setKpis(d.kpis || []); setLoading(false); })
+      .then(d => { setKpis(d.kpis || []); setFrozen(!!d.has_weekly_report); setLoading(false); })
       .catch(() => setLoading(false));
-  });
+  }, [brandId, weekLabel]);
 
   if (loading) return (
     <div className="card" style={{ marginBottom: 20 }}>
@@ -198,7 +199,10 @@ function KpiWidget({ brandId, weekLabel }: { brandId: string; weekLabel: string 
   return (
     <div className="card" style={{ marginBottom: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 600 }}>Progress KPI — {weekLabel}</h3>
+        <div>
+          <h3 style={{ fontSize: 14, fontWeight: 600 }}>Progress KPI — {weekLabel}</h3>
+          {frozen && <div style={{ fontSize: 11, color: '#93C5FD', marginTop: 2 }}>🔒 Frozen dari Weekly Report</div>}
+        </div>
         <Link href="/kpi-monitor" style={{ fontSize: 12, color: 'var(--gold)', textDecoration: 'none' }}>Detail →</Link>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
@@ -210,18 +214,16 @@ function KpiWidget({ brandId, weekLabel }: { brandId: string; weekLabel: string 
   );
 }
 
-import { useState } from 'react';
-import { getCurrentWeek } from '@/lib/utils';
-
-function KpiCard({ kpi }: { kpi: { kpi_name: string; pct: number; status: string; actual_value: number | null; target_value: number; unit: string } }) {
+function KpiCard({ kpi }: { kpi: { kpi_name: string; pct: number; status: string; actual_value: number | null; target_value: number; unit: string; effective_pct?: number } }) {
   const colors: Record<string, string> = { achieved: '#10B981', on_track: '#22C55E', at_risk: '#F59E0B', behind: '#EF4444' };
   const color = colors[kpi.status] || '#94A3B8';
+  const barPct = kpi.effective_pct ?? kpi.pct;
 
   return (
     <div style={{ padding: 14, background: 'var(--bg-surface)', borderRadius: 10, border: '1px solid var(--border)' }}>
       <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>{kpi.kpi_name}</div>
       <div className="progress-bar" style={{ marginBottom: 6 }}>
-        <div className="progress-fill" style={{ width: `${Math.min(kpi.pct, 100)}%`, background: color }} />
+        <div className="progress-fill" style={{ width: `${Math.min(barPct, 100)}%`, background: color }} />
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontSize: 12, fontWeight: 700, color }}>{kpi.pct}%</span>

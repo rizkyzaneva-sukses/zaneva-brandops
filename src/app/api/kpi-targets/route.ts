@@ -13,12 +13,20 @@ import {
 export async function GET(req: NextRequest) {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
   if (!session.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!['owner', 'admin', 'brand_manager'].includes(session.user.role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
 
   await ensureOmzetLainnyaFix();
 
   const { searchParams } = new URL(req.url);
-  const brand_id = searchParams.get('brand_id');
+  let brand_id = searchParams.get('brand_id');
   const week_label = searchParams.get('week_label');
+
+  if (session.user.role === 'brand_manager') {
+    brand_id = session.user.brand_id;
+    if (!brand_id) return NextResponse.json({ error: 'Brand tidak terikat ke user' }, { status: 403 });
+  }
 
   const where: Record<string, unknown> = {};
   if (brand_id) where.brand_id = brand_id;

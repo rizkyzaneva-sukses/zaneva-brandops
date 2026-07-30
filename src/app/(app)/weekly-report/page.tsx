@@ -1,10 +1,57 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getWeekOptions, formatNum, formatIdInput, parseNum, formatDateShort, calcPct, getKpiStatusClass } from '@/lib/utils';
+import {
+  getWeekOptions,
+  formatNum,
+  formatIdInput,
+  parseNum,
+  formatDateShort,
+  calcPct,
+  calcEffectivePct,
+  getKpiStatusClass,
+  aggregateKpi,
+  parseAutoSumConfig,
+  selectAutoSumSources,
+  sumAutoSumActuals,
+  createActionItem,
+  normalizeActionItems,
+  type ActionItem,
+} from '@/lib/utils';
 
-interface KpiEntry { kpi_item_id: string; kpi_name: string; unit: string; category: string; target: string; actual: string; pct: number; notes: string; is_auto: boolean; is_overridden: boolean; }
-interface WeeklyReport { id: string; brand_id: string; brand_name: string; week_label: string; week_start: string; status: string; kpis: KpiEntry[]; highlights: string; lowlights: string; root_cause: string; action_plan: string; eskalasi: string; submitted_by: string; }
+interface KpiEntry {
+  kpi_item_id: string;
+  kpi_name: string;
+  unit: string;
+  category: string;
+  target: string;
+  actual: string;
+  pct: number;
+  score?: number;
+  notes: string;
+  is_auto: boolean;
+  is_overridden: boolean;
+  higher_is_better?: boolean;
+  auto_source_role?: string | null;
+  auto_sum_platform?: string | null;
+}
+interface WeeklyReport {
+  id: string;
+  brand_id: string;
+  brand_name: string;
+  week_label: string;
+  week_start: string;
+  status: string;
+  kpis: KpiEntry[];
+  highlights: string;
+  lowlights: string;
+  root_cause: string;
+  action_plan: string;
+  eskalasi: string;
+  action_items?: ActionItem[];
+  submitted_by: string;
+  reviewed_by?: string | null;
+}
 interface Brand { id: string; name: string; }
 
 export default function WeeklyReportPage() {
@@ -17,10 +64,13 @@ export default function WeeklyReportPage() {
   const [selectedWeek, setSelectedWeek] = useState('');
   const [kpiData, setKpiData] = useState<KpiEntry[]>([]);
   const [narasi, setNarasi] = useState({ highlights: '', lowlights: '', root_cause: '', action_plan: '', eskalasi: '' });
+  const [actionItems, setActionItems] = useState<ActionItem[]>([]);
+  const [prevActions, setPrevActions] = useState<ActionItem[]>([]);
+  const [prevWeekLabel, setPrevWeekLabel] = useState('');
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const weekOptions = getWeekOptions(2);
+  const weekOptions = getWeekOptions(6);
 
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.json()).then(d => {
@@ -37,6 +87,13 @@ export default function WeeklyReportPage() {
       .then(r => r.json()).then(setReports);
   }, [user]);
 
+  useEffect(() => {
+    if (view === 'form' && selectedBrand && selectedWeek) {
+      loadPrevActions(selectedBrand, selectedWeek);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBrand, selectedWeek, view]);
+
   async function loadWeekData() {
     if (!selectedBrand || !selectedWeek) return;
     const weekData = weekOptions.find(w => w.week_label === selectedWeek);
@@ -52,24 +109,46 @@ export default function WeeklyReportPage() {
     const targets = await targetsRes.json();
     const standups = await standupRes.json();
 
-    // Auto-aggregate
-    const entries: KpiEntry[] = configs.map((c: { kpi_item_id: string; kpi_name: string; kpi_item: { unit: string; category: string; auto_source: string; auto_source_role: string; auto_aggregation: string } }) => {
+    type ConfigRow = {
+      kpi_item_id: string;
+      kpi_name: string;
+      kpi_item: {
+        unit: string;
+        category: string;
+        auto_source: string;
+        auto_source_role: string | null;
+        auto_aggregation: string;
+        platform?: string | null;
+        higher_is_better?: boolean;
+      };
+    };
+
+    const standupRows = (standups as { session: string; user_role: string; standup_date: string; status: string; daily_log: Record<string, unknown> }[]).map((s) => ({
+      ...s,
+      session: s.session || 'sore',
+      status: s.status || 'submitted',
+      daily_log: s.daily_log || {},
+    }));
+
+    // Auto-aggregate daily_log KPIs via shared aggregateKpi (parseNum + skip empty)
+    const entries: KpiEntry[] = (configs as ConfigRow[]).map((c) => {
       const target = targets.find((t: { kpi_item_id: string; target_value: number }) => t.kpi_item_id === c.kpi_item_id);
       let actual = '';
       let isAuto = false;
 
       if (c.kpi_item.category === 'auto_daily_log') {
-        const targetRole = c.kpi_item.auto_source_role;
-        const filtered = standups.filter((s: { user_role: string; daily_log: Record<string, unknown> }) =>
-          s.user_role === targetRole || ['owner', 'admin'].includes(s.user_role)
-        );
-        const vals = filtered.map((s: { daily_log: Record<string, unknown> }) => parseFloat(String(s.daily_log?.[c.kpi_item.auto_source] || '0'))).filter((v: number) => !isNaN(v));
-        if (vals.length > 0) {
-          const sum = vals.reduce((a: number, b: number) => a + b, 0);
-          actual = String(c.kpi_item.auto_aggregation === 'avg' ? sum / vals.length : sum);
+        const val = aggregateKpi(standupRows, c.kpi_item, weekData.week_start, weekData.week_end);
+        if (val !== null) {
+          actual = String(val);
           isAuto = true;
         }
       }
+
+      const higherIsBetter = c.kpi_item.higher_is_better !== false;
+      const targetVal = target ? target.target_value : 0;
+      const actualNum = parseNum(actual);
+      const pct = target ? calcPct(actualNum, targetVal) : 0;
+      const score = target ? calcEffectivePct(actualNum, targetVal, higherIsBetter) : 0;
 
       return {
         kpi_item_id: c.kpi_item_id,
@@ -78,53 +157,67 @@ export default function WeeklyReportPage() {
         category: c.kpi_item.category,
         target: target ? String(target.target_value) : '',
         actual,
-        pct: target ? calcPct(parseFloat(actual || '0'), target.target_value) : 0,
+        pct,
+        score,
         notes: '',
         is_auto: isAuto,
         is_overridden: false,
+        higher_is_better: higherIsBetter,
+        auto_source_role: c.kpi_item.auto_source_role,
+        auto_sum_platform: c.kpi_item.platform ?? null,
       };
     });
 
-    // Calculate auto_sum KPIs based on formula config stored in platform field
+    // auto_sum via shared selectAutoSumSources (same rules as KPI Monitor)
     for (let i = 0; i < entries.length; i++) {
       const entry = entries[i];
-      if (entry.category === 'auto_sum') {
-        const config = configs.find((cfg: any) => cfg.kpi_item_id === entry.kpi_item_id);
-        let formulaConfig: { formula?: string; kpi_names?: string } = { formula: 'all_currency' };
-        try {
-          if (config?.kpi_item?.platform) formulaConfig = JSON.parse(config.kpi_item.platform);
-        } catch { }
-
-        let sourceKpis: typeof entries = [];
-        const formula = formulaConfig.formula || 'all_currency';
-
-        if (formula === 'all_currency') {
-          sourceKpis = entries.filter(e => e.category === 'auto_daily_log' && e.unit === 'currency');
-        } else if (formula === 'all_number') {
-          sourceKpis = entries.filter(e => e.category === 'auto_daily_log' && e.unit === 'number');
-        } else if (formula === 'by_role') {
-          const targetRole = config?.kpi_item?.auto_source_role || '';
-          sourceKpis = entries.filter(e => e.category === 'auto_daily_log');
-          // Filter by role: check if the source config matches
-          if (targetRole) {
-            const roleConfigs = configs.filter((cfg: any) => cfg.kpi_item?.auto_source_role === targetRole && cfg.kpi_item?.category === 'auto_daily_log');
-            const roleKpiIds = new Set(roleConfigs.map((cfg: any) => cfg.kpi_item_id));
-            sourceKpis = entries.filter(e => roleKpiIds.has(e.kpi_item_id));
-          }
-        } else if (formula === 'custom') {
-          const kpiNames = (formulaConfig.kpi_names || '').split(',').map((n: string) => n.trim().toLowerCase()).filter(Boolean);
-          sourceKpis = entries.filter(e => kpiNames.includes(e.kpi_name.toLowerCase()));
-        } else {
-          // Fallback: all currency auto_daily_log
-          sourceKpis = entries.filter(e => e.category === 'auto_daily_log' && e.unit === 'currency');
-        }
-
-        const total = sourceKpis.reduce((sum, k) => sum + parseFloat(k.actual || '0'), 0);
-        entries[i] = { ...entry, actual: String(total), pct: calcPct(total, parseFloat(entry.target || '0')), is_auto: true };
-      }
+      if (entry.category !== 'auto_sum') continue;
+      const sumConfig = parseAutoSumConfig(entry.auto_sum_platform, entry.auto_source_role);
+      const sourceMeta = selectAutoSumSources(
+        entries.map((e) => ({
+          kpi_item_id: e.kpi_item_id,
+          kpi_name: e.kpi_name,
+          unit: e.unit,
+          category: e.category,
+          auto_source_role: e.auto_source_role,
+        })),
+        sumConfig
+      );
+      const sourceIds = new Set(sourceMeta.map((s) => s.kpi_item_id));
+      const sourceRows = entries.filter((e) => sourceIds.has(e.kpi_item_id));
+      const total = sumAutoSumActuals(sourceRows);
+      const higher = entry.higher_is_better !== false;
+      const targetVal = parseNum(entry.target);
+      entries[i] = {
+        ...entry,
+        actual: String(total),
+        pct: calcPct(total, targetVal),
+        score: calcEffectivePct(total, targetVal, higher),
+        is_auto: true,
+      };
     }
 
     setKpiData(entries);
+    await loadPrevActions(selectedBrand, selectedWeek);
+  }
+
+  async function loadPrevActions(brandId: string, weekLabel: string) {
+    const idx = weekOptions.findIndex((w) => w.week_label === weekLabel);
+    const prev = idx >= 0 ? weekOptions[idx + 1] : null;
+    if (!prev || !brandId) {
+      setPrevActions([]);
+      setPrevWeekLabel('');
+      return;
+    }
+    setPrevWeekLabel(prev.week_label);
+    try {
+      const res = await fetch(`/api/weekly-reports?brand_id=${brandId}&week_label=${encodeURIComponent(prev.week_label)}`);
+      const list = await res.json();
+      const prevReport = Array.isArray(list) ? list[0] : null;
+      setPrevActions(normalizeActionItems(prevReport?.action_items));
+    } catch {
+      setPrevActions([]);
+    }
   }
 
   function openCreate() {
@@ -132,8 +225,12 @@ export default function WeeklyReportPage() {
     setSelectedWeek(defaultWeek.week_label);
     setKpiData([]);
     setNarasi({ highlights: '', lowlights: '', root_cause: '', action_plan: '', eskalasi: '' });
+    setActionItems([]);
+    setPrevActions([]);
+    setPrevWeekLabel('');
     setEditingReport(null);
     setView('form');
+    if (selectedBrand && defaultWeek) loadPrevActions(selectedBrand, defaultWeek.week_label);
   }
 
   function openEdit(report: WeeklyReport) {
@@ -141,8 +238,10 @@ export default function WeeklyReportPage() {
     setSelectedWeek(report.week_label);
     setKpiData(report.kpis || []);
     setNarasi({ highlights: report.highlights || '', lowlights: report.lowlights || '', root_cause: report.root_cause || '', action_plan: report.action_plan || '', eskalasi: report.eskalasi || '' });
+    setActionItems(normalizeActionItems(report.action_items));
     setEditingReport(report);
     setView('form');
+    loadPrevActions(report.brand_id, report.week_label);
   }
 
   async function handleDelete(id: string) {
@@ -162,6 +261,26 @@ export default function WeeklyReportPage() {
 
   async function handleSave(status: 'draft' | 'submitted') {
     if (!selectedBrand || !selectedWeek) return;
+    if (status === 'submitted' && kpiData.length === 0) {
+      setToast('❌ Load data KPI dulu sebelum submit');
+      setTimeout(() => setToast(''), 3000);
+      return;
+    }
+    if (status === 'submitted') {
+      const behind = kpiData.filter((k) => (k.score ?? k.pct) < 70 && parseNum(k.target) > 0);
+      if (behind.length > 0) {
+        if (!narasi.root_cause.trim()) {
+          setToast(`❌ ${behind.length} KPI di bawah 70% — isi Root Cause`);
+          setTimeout(() => setToast(''), 4000);
+          return;
+        }
+        if (!actionItems.some((a) => a.title.trim() && a.owner.trim())) {
+          setToast('❌ Minimal 1 Action Item (judul + PIC) karena ada KPI behind');
+          setTimeout(() => setToast(''), 4000);
+          return;
+        }
+      }
+    }
     setSaving(true);
     const weekData = weekOptions.find(w => w.week_label === selectedWeek);
     const brand = brands.find(b => b.id === selectedBrand);
@@ -173,6 +292,7 @@ export default function WeeklyReportPage() {
       week_start: weekData?.week_start,
       week_end: weekData?.week_end,
       kpis: kpiData,
+      action_items: actionItems,
       ...narasi,
       status,
     };
@@ -185,16 +305,41 @@ export default function WeeklyReportPage() {
 
     setSaving(false);
     if (res.ok) {
-      setToast(status === 'submitted' ? '✅ Weekly Report disubmit!' : '💾 Draft tersimpan');
+      setToast(status === 'submitted' ? '✅ Weekly Report disubmit! Angka Monitor jadi Frozen.' : '💾 Draft tersimpan');
       setTimeout(() => setToast(''), 3000);
       fetch('/api/weekly-reports').then(r => r.json()).then(setReports);
       if (status === 'submitted') setView('list');
+    } else {
+      const d = await res.json().catch(() => ({}));
+      setToast(`❌ ${d.error || 'Gagal menyimpan'}`);
+      setTimeout(() => setToast(''), 4000);
+    }
+  }
+
+  async function handleReview(id: string, next: 'reviewed' | 'submitted') {
+    const res = await fetch('/api/weekly-reports', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, status: next }),
+    });
+    if (res.ok) {
+      setToast(next === 'reviewed' ? '✅ Ditandai reviewed' : '↩️ Status dikembalikan ke submitted');
+      setTimeout(() => setToast(''), 3000);
+      fetch('/api/weekly-reports').then(r => r.json()).then(setReports);
+    } else {
+      const d = await res.json().catch(() => ({}));
+      setToast(`❌ ${d.error || 'Gagal review'}`);
+      setTimeout(() => setToast(''), 3000);
     }
   }
 
   const STATUS_CLASS: Record<string, string> = { draft: 'status-behind', submitted: 'status-on-track', reviewed: 'status-achieved' };
 
   if (view === 'form') {
+    const brandOptions = user && !['owner', 'admin'].includes(user.role) && user.brand_id
+      ? brands.filter(b => b.id === user.brand_id)
+      : brands;
+
     return (
       <div style={{ maxWidth: 900 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
@@ -209,7 +354,7 @@ export default function WeeklyReportPage() {
             <div>
               <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Brand</label>
               <select className="input" value={selectedBrand} onChange={e => setSelectedBrand(e.target.value)}>
-                {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                {brandOptions.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </div>
             <div>
@@ -241,7 +386,7 @@ export default function WeeklyReportPage() {
                   {kpiData.map((kpi, i) => (
                     <tr key={kpi.kpi_item_id}>
                       <td style={{ wordBreak: 'break-word' }}>{kpi.kpi_name}<br /><span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{kpi.unit}</span></td>
-                      <td style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{kpi.target ? formatNum(parseFloat(kpi.target), kpi.unit) : '—'}</td>
+                      <td style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{kpi.target ? formatNum(parseNum(kpi.target), kpi.unit) : '—'}</td>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                           {kpi.unit === 'currency' && (
@@ -260,14 +405,39 @@ export default function WeeklyReportPage() {
                               if (raw !== '' && !/^[\d.,\s]*$/.test(raw)) return;
                               const num = parseNum(raw);
                               const stored = raw.trim() === '' ? '' : String(num);
+                              const higher = kpi.higher_is_better !== false;
+                              const targetVal = parseNum(kpi.target);
                               const newKpis = [...kpiData];
-                              newKpis[i] = { ...kpi, actual: stored, pct: calcPct(num, parseFloat(kpi.target || '0')), is_overridden: kpi.is_auto };
+                              newKpis[i] = {
+                                ...kpi,
+                                actual: stored,
+                                pct: calcPct(num, targetVal),
+                                score: calcEffectivePct(num, targetVal, higher),
+                                is_overridden: kpi.is_auto,
+                              };
                               for (let j = 0; j < newKpis.length; j++) {
-                                if (newKpis[j].category === 'auto_sum') {
-                                  const sourceKpis = newKpis.filter(ek => ek.category === 'auto_daily_log' && ek.unit === 'currency');
-                                  const total = sourceKpis.reduce((sum, k) => sum + parseNum(k.actual), 0);
-                                  newKpis[j] = { ...newKpis[j], actual: String(total), pct: calcPct(total, parseFloat(newKpis[j].target || '0')) };
-                                }
+                                if (newKpis[j].category !== 'auto_sum') continue;
+                                const sumConfig = parseAutoSumConfig(newKpis[j].auto_sum_platform, newKpis[j].auto_source_role);
+                                const sourceMeta = selectAutoSumSources(
+                                  newKpis.map((e) => ({
+                                    kpi_item_id: e.kpi_item_id,
+                                    kpi_name: e.kpi_name,
+                                    unit: e.unit,
+                                    category: e.category,
+                                    auto_source_role: e.auto_source_role,
+                                  })),
+                                  sumConfig
+                                );
+                                const sourceIds = new Set(sourceMeta.map((s) => s.kpi_item_id));
+                                const total = sumAutoSumActuals(newKpis.filter((e) => sourceIds.has(e.kpi_item_id)));
+                                const tVal = parseNum(newKpis[j].target);
+                                const h = newKpis[j].higher_is_better !== false;
+                                newKpis[j] = {
+                                  ...newKpis[j],
+                                  actual: String(total),
+                                  pct: calcPct(total, tVal),
+                                  score: calcEffectivePct(total, tVal, h),
+                                };
                               }
                               setKpiData(newKpis);
                             }}
@@ -277,7 +447,7 @@ export default function WeeklyReportPage() {
                       </td>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span className={`badge ${getKpiStatusClass(kpi.pct)}`}>{kpi.pct}%</span>
+                          <span className={`badge ${getKpiStatusClass(kpi.score ?? kpi.pct)}`}>{kpi.pct}%</span>
                         </div>
                       </td>
                       <td>
@@ -294,15 +464,66 @@ export default function WeeklyReportPage() {
           </div>
         )}
 
-        {/* Step 3: Narasi */}
+        {/* Step 3: Action minggu lalu (check-in) */}
+        {prevActions.length > 0 && (
+          <div className="card" style={{ marginBottom: 20, borderColor: 'rgba(245,158,11,0.35)' }}>
+            <h3 style={{ fontSize: 13, fontWeight: 700, color: '#F59E0B', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 8 }}>Step 3: Action Minggu Lalu</h3>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>Cek dulu komitmen dari {prevWeekLabel} sebelum bikin action baru.</p>
+            <div style={{ display: 'grid', gap: 8 }}>
+              {prevActions.map((a) => (
+                <div key={a.id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '10px 12px', background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <span className={`badge ${a.status === 'done' ? 'status-achieved' : a.status === 'blocked' ? 'status-behind' : 'status-at-risk'}`}>{a.status}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 500, fontSize: 13 }}>{a.title || '—'}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>PIC: {a.owner || '—'} · Due: {a.due_date || '—'}{a.kpi_name ? ` · ${a.kpi_name}` : ''}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Step 4: Action items minggu ini */}
         <div className="card" style={{ marginBottom: 20 }}>
-          <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 16 }}>Step 3: Narasi</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '1px' }}>Step 4: Action Items Minggu Depan</h3>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setActionItems((p) => [...p, createActionItem()])}>+ Tambah</button>
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>Max 3 action ideal. Wajib jika ada KPI score &lt; 70%.</p>
+          {actionItems.length === 0 ? (
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 12 }}>Belum ada action item.</div>
+          ) : actionItems.map((item, i) => (
+            <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: 8, marginBottom: 8 }}>
+              <input className="input" placeholder="Apa yang dikerjakan?" value={item.title} onChange={(e) => {
+                const n = [...actionItems]; n[i] = { ...item, title: e.target.value }; setActionItems(n);
+              }} />
+              <input className="input" placeholder="PIC" value={item.owner} onChange={(e) => {
+                const n = [...actionItems]; n[i] = { ...item, owner: e.target.value }; setActionItems(n);
+              }} />
+              <input className="input" type="date" value={item.due_date} onChange={(e) => {
+                const n = [...actionItems]; n[i] = { ...item, due_date: e.target.value }; setActionItems(n);
+              }} />
+              <select className="input" value={item.status} onChange={(e) => {
+                const n = [...actionItems]; n[i] = { ...item, status: e.target.value as ActionItem['status'] }; setActionItems(n);
+              }}>
+                <option value="open">open</option>
+                <option value="done">done</option>
+                <option value="blocked">blocked</option>
+              </select>
+              <button type="button" className="btn btn-ghost btn-sm" style={{ color: '#EF4444' }} onClick={() => setActionItems((p) => p.filter((_, j) => j !== i))}>✕</button>
+            </div>
+          ))}
+        </div>
+
+        {/* Step 5: Narasi */}
+        <div className="card" style={{ marginBottom: 20 }}>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 16 }}>Step 5: Narasi</h3>
           <div style={{ display: 'grid', gap: 16 }}>
             {[
               { key: 'highlights', label: '✨ Highlights — Pencapaian Terbaik Minggu Ini' },
               { key: 'lowlights', label: '⚠️ Lowlights — Masalah / Kekurangan' },
-              { key: 'root_cause', label: '🔍 Root Cause — Analisis Akar Masalah' },
-              { key: 'action_plan', label: '📋 Action Plan — Rencana Minggu Depan' },
+              { key: 'root_cause', label: '🔍 Root Cause — Wajib jika ada KPI score < 70%' },
+              { key: 'action_plan', label: '📋 Action Plan (narasi bebas, opsional)' },
               { key: 'eskalasi', label: '🚨 Eskalasi ke Owner (opsional)' },
             ].map(field => (
               <div key={field.key}>
@@ -351,8 +572,14 @@ export default function WeeklyReportPage() {
                 <td><span className={`badge ${STATUS_CLASS[r.status]}`}>{r.status}</span></td>
                 <td style={{ color: 'var(--text-muted)', fontSize: 13 }}>{r.submitted_by || '—'}</td>
                 <td>
-                  <div style={{ display: 'flex', gap: 6 }}>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     <button className="btn btn-ghost btn-sm" onClick={() => openEdit(r)}>Edit</button>
+                    {user && ['owner', 'admin'].includes(user.role) && r.status === 'submitted' && (
+                      <button className="btn btn-ghost btn-sm" style={{ color: '#10B981' }} onClick={() => handleReview(r.id, 'reviewed')}>Review ✓</button>
+                    )}
+                    {user && ['owner', 'admin'].includes(user.role) && r.status === 'reviewed' && (
+                      <button className="btn btn-ghost btn-sm" onClick={() => handleReview(r.id, 'submitted')}>Unreview</button>
+                    )}
                     {user && ['owner', 'admin', 'brand_manager'].includes(user.role) && (
                       <button
                         className="btn btn-ghost btn-sm"

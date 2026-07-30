@@ -61,13 +61,17 @@ export default function StandupPage() {
   const [dynamicLogFields, setDynamicLogFields] = useState<any[] | null>(null);
   const [isEditingSubmitted, setIsEditingSubmitted] = useState(false);
 
-  // Use local date (YYYY-MM-DD) to match user's actual day
+  // Business date Asia/Jakarta (YYYY-MM-DD) — same as dashboard & KPI periods
   const today = (() => {
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    const d = String(now.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
+    try {
+      return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+    } catch {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      const d = String(now.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
   })();
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {

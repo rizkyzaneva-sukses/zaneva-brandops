@@ -1,33 +1,34 @@
 import { requireAuth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import DashboardClient from '@/components/dashboard/DashboardClient';
-import { getCurrentWeek, formatDateID } from '@/lib/utils';
+import { getCurrentWeek, formatDateID, getBusinessDateISO, getBusinessNow, parseBusinessDate } from '@/lib/utils';
 
 export default async function DashboardPage() {
   const user = await requireAuth();
-  const today = new Date();
-  const todayStr = today.toISOString().split('T')[0];
+  const todayStr = getBusinessDateISO();
+  const today = getBusinessNow();
   const week = getCurrentWeek(today);
 
   // Today's standups for this user
   const myStandups = await prisma.standup.findMany({
     where: {
       user_id: user.id,
-      standup_date: { gte: new Date(todayStr + 'T00:00:00'), lte: new Date(todayStr + 'T23:59:59') },
+      standup_date: { gte: new Date(todayStr + 'T00:00:00.000Z'), lte: new Date(todayStr + 'T23:59:59.999Z') },
     },
   });
 
   const pagiSubmitted = myStandups.some(s => s.session === 'pagi' && s.status === 'submitted');
   const soreSubmitted = myStandups.some(s => s.session === 'sore' && s.status === 'submitted');
 
-  // Recent activity (last 7 days)
-  const sevenDaysAgo = new Date(today);
-  sevenDaysAgo.setDate(today.getDate() - 6);
+  // Recent activity (last 7 business days, Asia/Jakarta)
+  const sevenDaysAgo = parseBusinessDate(todayStr);
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+  const sevenDaysAgoStr = `${sevenDaysAgo.getFullYear()}-${String(sevenDaysAgo.getMonth() + 1).padStart(2, '0')}-${String(sevenDaysAgo.getDate()).padStart(2, '0')}`;
 
   const recentStandups = await prisma.standup.findMany({
     where: {
       brand_id: user.brand_id || undefined,
-      standup_date: { gte: sevenDaysAgo },
+      standup_date: { gte: new Date(sevenDaysAgoStr + 'T00:00:00.000Z') },
       status: 'submitted',
     },
     orderBy: { standup_date: 'asc' },
@@ -36,10 +37,14 @@ export default async function DashboardPage() {
   // Daily counts for chart
   const dailyCounts: { date: string; count: number }[] = [];
   for (let i = 6; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - i);
-    const ds = d.toISOString().split('T')[0];
-    const count = recentStandups.filter(s => s.standup_date.toISOString().split('T')[0] === ds).length;
+    const d = parseBusinessDate(todayStr);
+    d.setDate(d.getDate() - i);
+    const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const count = recentStandups.filter(s => {
+      const sd = s.standup_date;
+      const sds = typeof sd === 'string' ? String(sd).substring(0, 10) : `${sd.getUTCFullYear()}-${String(sd.getUTCMonth() + 1).padStart(2, '0')}-${String(sd.getUTCDate()).padStart(2, '0')}`;
+      return sds === ds;
+    }).length;
     dailyCounts.push({ date: ds, count });
   }
 
@@ -50,7 +55,7 @@ export default async function DashboardPage() {
     const brands = await prisma.brand.findMany({ where: { status: 'active' } });
     const allUsers = await prisma.user.findMany({ where: { is_active: true } });
     const todayAllStandups = await prisma.standup.findMany({
-      where: { standup_date: { gte: new Date(todayStr + 'T00:00:00'), lte: new Date(todayStr + 'T23:59:59') } },
+      where: { standup_date: { gte: new Date(todayStr + 'T00:00:00.000Z'), lte: new Date(todayStr + 'T23:59:59.999Z') } },
     });
 
     statusBoardData = brands.map(brand => {

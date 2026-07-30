@@ -127,9 +127,9 @@ export async function PUT(req: NextRequest) {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
   if (!session.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  // Only owner and brand_manager can edit other people's sprints
-  if (!['owner', 'brand_manager'].includes(session.user.role)) {
-    return NextResponse.json({ error: 'Hanya Owner dan Brand Manager yang dapat mengedit sprint tim lain' }, { status: 403 });
+  // Owner, admin, and brand_manager can edit other people's sprints
+  if (!['owner', 'admin', 'brand_manager'].includes(session.user.role)) {
+    return NextResponse.json({ error: 'Hanya Owner, Admin, dan Brand Manager yang dapat mengedit sprint tim lain' }, { status: 403 });
   }
 
   const data = await req.json();

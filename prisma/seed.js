@@ -163,17 +163,9 @@ async function main() {
 
   console.log('✅ KPI brand configs created');
 
-  // Create weekly targets for current week
-  const now = new Date();
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
-  monday.setHours(0, 0, 0, 0);
-  const sunday = new Date(monday);
-  sunday.setDate(monday.getDate() + 6);
-
-  const weekNum = getISOWeek(monday);
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-  const weekLabel = `W${weekNum} - ${monthNames[monday.getMonth()]} ${monday.getFullYear()}`;
+  // Create weekly targets for current app period (1-7 / 8-14 / 15-21 / 22-EOM), not ISO weeks
+  const period = getAppPeriod(new Date());
+  const weekLabel = period.week_label;
 
   const targets = [
     { kpi_item_id: 'kpi-omzet-shopee', kpi_name: 'Omzet Shopee', target_value: 25000000 },
@@ -192,9 +184,25 @@ async function main() {
     await prisma.kpiWeeklyTarget.upsert({
       where: { brand_id_week_label_kpi_item_id: { brand_id: 'brand-zaneva', week_label: weekLabel, kpi_item_id: t.kpi_item_id } },
       update: {},
-      create: { brand_id: 'brand-zaneva', brand_name: 'Zaneva', week_label: weekLabel, week_start_date: monday, week_end_date: sunday, ...t },
+      create: {
+        brand_id: 'brand-zaneva',
+        brand_name: 'Zaneva',
+        week_label: weekLabel,
+        week_start_date: period.periodStart,
+        week_end_date: period.periodEnd,
+        ...t,
+      },
     });
   }
+
+  // Align Total GMV auto_sum formula with app default (omzet sources only)
+  await prisma.kpiItem.update({
+    where: { id: 'kpi-total-gmv' },
+    data: {
+      platform: JSON.stringify({ formula: 'omzet', kpi_names: '' }),
+      description: 'Omzet Shopee + TikTok + Omzet Lainnya FIX',
+    },
+  }).catch(() => {});
 
   console.log('✅ Weekly targets created for', weekLabel);
   console.log('\n✨ Seed selesai!');
@@ -208,11 +216,37 @@ async function main() {
   console.log('  bm.besyari@zaneva.id    / bm123         (Brand Manager - Be.Syari)');
 }
 
-function getISOWeek(date) {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+/** Match src/lib/utils.ts period model: 4 buckets/month, epoch Jan 2026 */
+function getAppPeriod(date) {
+  const EPOCH_YEAR = 2026;
+  const EPOCH_MONTH = 0;
+  const day = date.getDate();
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const lastDay = new Date(year, month + 1, 0).getDate();
+
+  let period;
+  let startDay;
+  let endDay;
+  if (day <= 7) {
+    period = 1; startDay = 1; endDay = 7;
+  } else if (day <= 14) {
+    period = 2; startDay = 8; endDay = 14;
+  } else if (day <= 21) {
+    period = 3; startDay = 15; endDay = 21;
+  } else {
+    period = 4; startDay = 22; endDay = lastDay;
+  }
+
+  const periodStart = new Date(year, month, startDay);
+  const periodEnd = new Date(year, month, endDay);
+  const monthsFromEpoch = (year - EPOCH_YEAR) * 12 + (month - EPOCH_MONTH);
+  const weekNum = monthsFromEpoch * 4 + period;
+  const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MEI', 'JUN', 'JUL', 'AGU', 'SEP', 'OKT', 'NOV', 'DES'];
+  const monthUpper = `${monthNames[month]} ${year}`;
+  const week_label = `W${weekNum} [${startDay} - ${endDay} ${monthUpper}]`;
+
+  return { week_label, periodStart, periodEnd, weekNum };
 }
 
 main()

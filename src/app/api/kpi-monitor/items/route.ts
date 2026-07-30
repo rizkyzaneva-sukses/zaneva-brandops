@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
   // Store auto_sum config in platform field as JSON
   let platformData: string | null = null;
   if (category === 'auto_sum') {
-    platformData = JSON.stringify({ formula: auto_sum_formula || 'all_currency', kpi_names: auto_sum_kpi_names || '' });
+    platformData = JSON.stringify({ formula: auto_sum_formula || 'omzet', kpi_names: auto_sum_kpi_names || '' });
   }
 
   const newKpi = await prisma.kpiItem.create({
@@ -161,7 +161,7 @@ export async function PUT(req: NextRequest) {
   // Store auto_sum config in platform field as JSON
   let platformData: string | null = null;
   if (category === 'auto_sum') {
-    platformData = JSON.stringify({ formula: auto_sum_formula || 'all_currency', kpi_names: auto_sum_kpi_names || '' });
+    platformData = JSON.stringify({ formula: auto_sum_formula || 'omzet', kpi_names: auto_sum_kpi_names || '' });
   }
 
   // Update master KPI

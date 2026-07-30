@@ -58,7 +58,7 @@ export default function PengaturanPage() {
   const [brandForm, setBrandForm] = useState({ name: '', description: '', status: 'active' });
   const [userForm, setUserForm] = useState({ email: '', full_name: '', role: 'creative', brand_id: '', password: 'zaneva123' });
   const [editUserForm, setEditUserForm] = useState({ id: '', full_name: '' });
-  const [kpiForm, setKpiForm] = useState<{ name: string; category: string; unit: string; description: string; auto_source_role: string; auto_sum_formula?: string; auto_sum_kpi_names?: string; higher_is_better: boolean }>({ name: '', category: 'manual', unit: 'currency', description: '', auto_source_role: '', auto_sum_formula: 'all_currency', auto_sum_kpi_names: '', higher_is_better: true });
+  const [kpiForm, setKpiForm] = useState<{ name: string; category: string; unit: string; description: string; auto_source_role: string; auto_sum_formula?: string; auto_sum_kpi_names?: string; higher_is_better: boolean }>({ name: '', category: 'manual', unit: 'currency', description: '', auto_source_role: '', auto_sum_formula: 'omzet', auto_sum_kpi_names: '', higher_is_better: true });
   const [editKpiId, setEditKpiId] = useState<string | null>(null);
   const [showKpiModal, setShowKpiModal] = useState(false);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
@@ -185,7 +185,7 @@ export default function PengaturanPage() {
     setSaving(false);
     if (res.ok) {
       showToast(`✅ Master KPI berhasil ${isEdit ? 'diperbarui' : 'ditambahkan'}`);
-      setKpiForm({ name: '', category: 'manual', unit: 'currency', description: '', auto_source_role: '', auto_sum_formula: 'all_currency', auto_sum_kpi_names: '', higher_is_better: true });
+      setKpiForm({ name: '', category: 'manual', unit: 'currency', description: '', auto_source_role: '', auto_sum_formula: 'omzet', auto_sum_kpi_names: '', higher_is_better: true });
       setEditKpiId(null);
       setShowKpiModal(false);
       // Refresh current brand KPI configs if a brand is selected so it auto-syncs
@@ -743,7 +743,7 @@ export default function PengaturanPage() {
                 </select>
               </div>
             </div>
-            <button className="btn btn-primary" onClick={() => { setEditKpiId(null); setKpiForm({ name: '', category: 'manual', unit: 'currency', description: '', auto_source_role: '', auto_sum_formula: 'all_currency', auto_sum_kpi_names: '', higher_is_better: true }); setShowKpiModal(true); }}>+ Tambah Master KPI</button>
+            <button className="btn btn-primary" onClick={() => { setEditKpiId(null); setKpiForm({ name: '', category: 'manual', unit: 'currency', description: '', auto_source_role: '', auto_sum_formula: 'omzet', auto_sum_kpi_names: '', higher_is_better: true }); setShowKpiModal(true); }}>+ Tambah Master KPI</button>
           </div>
 
           {selectedBrandForKpi && (
@@ -851,7 +851,8 @@ export default function PengaturanPage() {
                 {kpiForm.category === 'auto_sum' && (
                   <div>
                     <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Rumus Agregasi</label>
-                    <select className="input" value={kpiForm.auto_sum_formula || 'all_currency'} onChange={e => setKpiForm(p => ({ ...p, auto_sum_formula: e.target.value }))}>
+                    <select className="input" value={kpiForm.auto_sum_formula || 'omzet'} onChange={e => setKpiForm(p => ({ ...p, auto_sum_formula: e.target.value }))}>
+                      <option value="omzet">Semua Omzet/Omset (currency) — default Total GMV</option>
                       <option value="all_currency">Semua KPI Auto Daily Log bersatuan Currency</option>
                       <option value="all_number">Semua KPI Auto Daily Log bersatuan Number</option>
                       <option value="by_role">Semua KPI Auto Daily Log dari Role tertentu</option>

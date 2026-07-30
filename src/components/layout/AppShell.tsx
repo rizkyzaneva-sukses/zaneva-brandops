@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { path: '/monthly-report', label: 'Monthly Report', icon: '📊', roles: ['owner', 'admin', 'brand_manager'] },
   { path: '/kpi-target', label: 'Target KPI', icon: '🎯', roles: ['owner', 'admin'] },
   { path: '/kpi-monitor', label: 'Monitor KPI', icon: '📈', roles: ['owner', 'admin', 'brand_manager'] },
+  { path: '/portfolio', label: 'Portfolio', icon: '🏢', roles: ['owner', 'admin'] },
   { path: '/standup-history', label: 'History Sprint', icon: '🕐', roles: ['all'] },
   { path: '/individual-report', label: 'Laporan Kinerja', icon: '👥', roles: ['owner', 'admin', 'brand_manager'] },
   { path: '/guide', label: 'Panduan', icon: '📖', roles: ['all'] },

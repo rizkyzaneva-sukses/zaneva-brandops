@@ -184,7 +184,10 @@ model WeeklyReport {
   root_cause       String?       @db.Text
   action_plan      String?       @db.Text
   eskalasi         String?       @db.Text
+  action_items     Json          @default("[]")
   status           ReportStatus  @default(draft)
+  reviewed_by      String?
+  reviewed_at      DateTime?
   created_at       DateTime      @default(now())
   updated_at       DateTime      @updatedAt
 
@@ -208,6 +211,8 @@ model MonthlyReport {
   insight_kompetitor  String?      @db.Text
   rencana_strategis   String?      @db.Text
   status              ReportStatus @default(draft)
+  reviewed_by         String?
+  reviewed_at         DateTime?
   created_at          DateTime     @default(now())
   updated_at          DateTime     @updatedAt
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getCurrentWeek, getWeekOptions, formatNum, getKpiStatusClass } from '@/lib/utils';
+import { getCurrentWeek, getWeekOptions, formatNum, getKpiStatusClass, getBusinessDateISO, getProgressColor } from '@/lib/utils';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid } from 'recharts';
 
 interface KpiData {
@@ -12,9 +12,15 @@ interface KpiData {
   target_value: number;
   actual_value: number | null;
   pct: number;
+  effective_pct?: number;
+  higher_is_better?: boolean;
   status: string;
   status_label: string;
   is_from_weekly_report: boolean;
+  pace_status?: string;
+  pace_label?: string;
+  expected_pct?: number;
+  required_daily?: number;
 }
 
 interface Brand { id: string; name: string; }
@@ -50,11 +56,12 @@ export default function KpiMonitorPage() {
   useEffect(() => {
     if (!selectedBrand) return;
     setLoading(true);
-    fetch(`/api/kpi-monitor?brand_id=${selectedBrand}&week_start=${week.week_start}&week_end=${week.week_end}&week_label=${encodeURIComponent(week.week_label)}`)
+    const dayParam = view === 'today' ? `&day=${getBusinessDateISO()}` : '';
+    fetch(`/api/kpi-monitor?brand_id=${selectedBrand}&week_start=${week.week_start}&week_end=${week.week_end}&week_label=${encodeURIComponent(week.week_label)}${dayParam}`)
       .then(r => r.json())
       .then(d => { setKpis(d.kpis || []); setHasWeeklyReport(d.has_weekly_report); setLoading(false); })
       .catch(() => setLoading(false));
-  }, [selectedBrand, selectedWeekLabel]);
+  }, [selectedBrand, selectedWeekLabel, view]);
 
   // Load trend data when switching to trend tab
   useEffect(() => {
@@ -77,7 +84,7 @@ export default function KpiMonitorPage() {
         const point: TrendPoint = { week_label: r.week_label.replace(/\[.*?\]/, '').trim() };
         r.kpis.forEach((k: KpiData) => {
           allKpiNames.add(k.kpi_name);
-          point[k.kpi_name] = k.pct;
+          point[k.kpi_name] = k.effective_pct ?? k.pct;
         });
         return point;
       });
@@ -90,9 +97,9 @@ export default function KpiMonitorPage() {
   const isOwner = user && ['owner', 'admin'].includes(user.role);
 
   function exportCSV() {
-    const rows = [['KPI', 'Target', 'Aktual', 'Pencapaian (%)', 'Status']];
+    const rows = [['KPI', 'Target', 'Aktual', 'Pencapaian (%)', 'Score efektif (%)', 'Status']];
     kpis.forEach(k => {
-      rows.push([k.kpi_name, String(k.target_value), String(k.actual_value ?? ''), String(k.pct), k.status_label]);
+      rows.push([k.kpi_name, String(k.target_value), String(k.actual_value ?? ''), String(k.pct), String(k.effective_pct ?? k.pct), k.status_label]);
     });
     const csv = rows.map(r => r.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -162,9 +169,13 @@ export default function KpiMonitorPage() {
             <div className="card" style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)' }}>Pilih brand untuk melihat KPI</div>
           ) : (
             <>
-              {hasWeeklyReport && (
+              {hasWeeklyReport && view === 'week' ? (
                 <div style={{ padding: '10px 16px', background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: 8, marginBottom: 16, fontSize: 13, color: '#93C5FD' }}>
-                  ℹ️ Data KPI diambil dari Weekly Report yang sudah disubmit untuk minggu ini
+                  🔒 <b>Frozen</b> — angka dari Weekly Report submitted. Edit standup tidak mengubah monitor sampai WR diubah/dihapus.
+                </div>
+              ) : (
+                <div style={{ padding: '10px 16px', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 8, marginBottom: 16, fontSize: 13, color: '#6EE7B7' }}>
+                  📡 <b>Live</b> — agregasi real-time dari daily log sprint sore{view === 'today' ? ' (hari ini saja)' : ''}. Target tetap target mingguan.
                 </div>
               )}
 
@@ -185,45 +196,75 @@ export default function KpiMonitorPage() {
 
               {/* KPI Table */}
               <div className="card" style={{ marginBottom: 24 }}>
-                <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Tabel KPI Mingguan</h3>
+                <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>
+                  Tabel KPI {view === 'today' ? 'Hari Ini' : 'Mingguan'}
+                </h3>
                 <div style={{ overflowX: 'auto' }}>
                   <table className="table">
                     <thead>
                       <tr>
                         <th>KPI</th>
-                        <th>Target</th>
-                        <th>Aktual (Kumulatif)</th>
+                        <th>Target Minggu</th>
+                        <th>Aktual {view === 'today' ? '(Hari Ini)' : '(Kumulatif)'}</th>
                         <th>Pencapaian</th>
+                        <th>Pace</th>
                         <th>Status</th>
                       </tr>
                     </thead>
                     <tbody>
                       {kpis.length === 0 ? (
-                        <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 32 }}>Belum ada data KPI. Pastikan target sudah diset dan sprint sudah disubmit.</td></tr>
-                      ) : kpis.map(kpi => (
-                        <tr key={kpi.kpi_item_id}>
-                          <td>
-                            <div style={{ fontWeight: 500 }}>{kpi.kpi_name}</div>
-                            <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'capitalize' }}>{kpi.category.replace('_', ' ')}</div>
-                          </td>
-                          <td style={{ fontWeight: 500 }}>{formatNum(kpi.target_value, kpi.unit)}</td>
-                          <td>
-                            <span style={{ fontWeight: 500 }}>{kpi.actual_value !== null ? formatNum(kpi.actual_value, kpi.unit) : '—'}</span>
-                            {kpi.is_from_weekly_report && <span style={{ fontSize: 10, color: '#93C5FD', marginLeft: 4 }}>WR</span>}
-                          </td>
-                          <td>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                              <div className="progress-bar" style={{ width: 80 }}>
-                                <div className="progress-fill" style={{ width: `${Math.min(kpi.pct, 100)}%`, background: kpi.pct >= 100 ? '#10B981' : kpi.pct >= 70 ? '#22C55E' : kpi.pct >= 50 ? '#F59E0B' : '#EF4444' }} />
+                        <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 32 }}>Belum ada data KPI. Pastikan target sudah diset dan sprint sudah disubmit.</td></tr>
+                      ) : kpis.map(kpi => {
+                        const eff = kpi.effective_pct ?? kpi.pct;
+                        const barColor = getProgressColor(eff);
+                        const paceBehind = kpi.pace_status === 'behind_pace';
+                        return (
+                          <tr key={kpi.kpi_item_id}>
+                            <td>
+                              <div style={{ fontWeight: 500 }}>{kpi.kpi_name}</div>
+                              <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'capitalize' }}>
+                                {kpi.category.replace('_', ' ')}
+                                {kpi.higher_is_better === false ? ' · lower better' : ''}
                               </div>
-                              <span style={{ fontWeight: 600, fontSize: 13 }}>{kpi.pct}%</span>
-                            </div>
-                          </td>
-                          <td>
-                            <span className={`badge ${getKpiStatusClass(kpi.pct)}`}>{kpi.status_label}</span>
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                            <td style={{ fontWeight: 500 }}>{formatNum(kpi.target_value, kpi.unit)}</td>
+                            <td>
+                              <span style={{ fontWeight: 500 }}>{kpi.actual_value !== null ? formatNum(kpi.actual_value, kpi.unit) : '—'}</span>
+                              {kpi.is_from_weekly_report && <span style={{ fontSize: 10, color: '#93C5FD', marginLeft: 4 }}>WR</span>}
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                <div className="progress-bar" style={{ width: 80 }}>
+                                  <div className="progress-fill" style={{ width: `${Math.min(eff, 100)}%`, background: barColor }} />
+                                </div>
+                                <span style={{ fontWeight: 600, fontSize: 13 }}>{kpi.pct}%</span>
+                              </div>
+                            </td>
+                            <td>
+                              {view === 'today' || !kpi.pace_label || kpi.pace_status === 'n_a' ? (
+                                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>—</span>
+                              ) : (
+                                <div>
+                                  <span className={`badge ${paceBehind ? 'status-behind' : kpi.pace_status === 'done' ? 'status-achieved' : 'status-on-track'}`} style={{ fontSize: 10 }}>
+                                    {kpi.pace_label}
+                                  </span>
+                                  {paceBehind && kpi.required_daily != null && kpi.required_daily > 0 && (
+                                    <div style={{ fontSize: 10, color: '#FCA5A5', marginTop: 4 }}>
+                                      Butuh {formatNum(kpi.required_daily, kpi.unit)}/hari
+                                    </div>
+                                  )}
+                                  {typeof kpi.expected_pct === 'number' && kpi.expected_pct > 0 && (
+                                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>Ekspektasi kalender ~{kpi.expected_pct}%</div>
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                            <td>
+                              <span className={`badge ${getKpiStatusClass(eff)}`}>{kpi.status_label}</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
