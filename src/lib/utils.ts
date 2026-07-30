@@ -187,10 +187,18 @@ export function getTodayISO(): string {
 // ─── NUMBER UTILS ─────────────────────────────────────────────────────────────
 
 export function parseNum(val: unknown): number {
-  if (!val && val !== 0) return 0;
-  const str = String(val).replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
-  const num = parseFloat(str);
-  return isNaN(num) ? 0 : num;
+  if (val === '' || val === null || val === undefined) return 0;
+  if (typeof val === 'number') return isNaN(val) ? 0 : val;
+  const raw = String(val).trim().replace(/\s/g, '');
+  if (!raw) return 0;
+  // Plain JS number string (e.g. 7.4, 1109612) — keep as-is
+  if (/^-?\d+(\.\d+)?$/.test(raw)) {
+    const n = parseFloat(raw);
+    return isNaN(n) ? 0 : n;
+  }
+  // ID format: 1.000.000 or 7,4 or 1.000.000,5
+  const n = parseFloat(raw.replace(/\./g, '').replace(',', '.'));
+  return isNaN(n) ? 0 : n;
 }
 
 export function formatNum(val: unknown, unit: string): string {
@@ -206,6 +214,17 @@ export function formatNum(val: unknown, unit: string): string {
 
 export function formatCurrency(val: number): string {
   return 'Rp ' + val.toLocaleString('id-ID');
+}
+
+/** Display number with ID thousand separators (1000000 → 1.000.000). Empty stays empty. */
+export function formatIdInput(val: unknown): string {
+  if (val === '' || val === null || val === undefined) return '';
+  const num = parseNum(val);
+  if (isNaN(num)) return '';
+  if (Math.abs(num - Math.round(num)) < 1e-9) {
+    return Math.round(num).toLocaleString('id-ID');
+  }
+  return num.toLocaleString('id-ID', { maximumFractionDigits: 4 });
 }
 
 // ─── KPI UTILS ────────────────────────────────────────────────────────────────

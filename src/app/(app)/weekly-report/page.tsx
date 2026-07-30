@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getWeekOptions, formatNum, formatDateShort, calcPct, getKpiStatusClass } from '@/lib/utils';
+import { getWeekOptions, formatNum, formatIdInput, parseNum, formatDateShort, calcPct, getKpiStatusClass } from '@/lib/utils';
 
 interface KpiEntry { kpi_item_id: string; kpi_name: string; unit: string; category: string; target: string; actual: string; pct: number; notes: string; is_auto: boolean; is_overridden: boolean; }
 interface WeeklyReport { id: string; brand_id: string; brand_name: string; week_label: string; week_start: string; status: string; kpis: KpiEntry[]; highlights: string; lowlights: string; root_cause: string; action_plan: string; eskalasi: string; submitted_by: string; }
@@ -249,20 +249,23 @@ export default function WeeklyReportPage() {
                           )}
                           <input
                             className="input"
-                            type="number"
-                            value={kpi.actual}
+                            type="text"
+                            inputMode="decimal"
+                            value={formatIdInput(kpi.actual)}
                             style={{ width: '100%', minWidth: 0, fontVariantNumeric: 'tabular-nums' }}
                             readOnly={kpi.category === 'auto_sum'}
                             onChange={e => {
                               if (kpi.category === 'auto_sum') return;
+                              const raw = e.target.value;
+                              if (raw !== '' && !/^[\d.,\s]*$/.test(raw)) return;
+                              const num = parseNum(raw);
+                              const stored = raw.trim() === '' ? '' : String(num);
                               const newKpis = [...kpiData];
-                              newKpis[i] = { ...kpi, actual: e.target.value, pct: calcPct(parseFloat(e.target.value || '0'), parseFloat(kpi.target || '0')), is_overridden: kpi.is_auto };
-                              // Recalculate all auto_sum KPIs whenever any value changes
+                              newKpis[i] = { ...kpi, actual: stored, pct: calcPct(num, parseFloat(kpi.target || '0')), is_overridden: kpi.is_auto };
                               for (let j = 0; j < newKpis.length; j++) {
                                 if (newKpis[j].category === 'auto_sum') {
-                                  // Simple recalc: sum all non-auto_sum entries that are auto_daily_log with currency
                                   const sourceKpis = newKpis.filter(ek => ek.category === 'auto_daily_log' && ek.unit === 'currency');
-                                  const total = sourceKpis.reduce((sum, k) => sum + parseFloat(k.actual || '0'), 0);
+                                  const total = sourceKpis.reduce((sum, k) => sum + parseNum(k.actual), 0);
                                   newKpis[j] = { ...newKpis[j], actual: String(total), pct: calcPct(total, parseFloat(newKpis[j].target || '0')) };
                                 }
                               }

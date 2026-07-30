@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getMonthOptions, getPeriodsForMonth, formatNum, calcPct, getKpiStatusClass } from '@/lib/utils';
+import { getMonthOptions, getPeriodsForMonth, formatNum, formatIdInput, parseNum, calcPct, getKpiStatusClass } from '@/lib/utils';
 
 interface MonthlyReport { id: string; brand_id: string; brand_name: string; month_label: string; month_year: string; status: string; scorecard: ScorecardEntry[]; keberhasilan: string; kegagalan: string; insight_kompetitor: string; rencana_strategis: string; submitted_by: string; }
 interface ScorecardEntry { kpi_name: string; unit: string; actual_monthly: number; target_monthly: number; pct: number; score: number; }
@@ -173,12 +173,17 @@ export default function MonthlyReportPage() {
                           )}
                           <input
                             className="input"
-                            type="number"
-                            value={entry.actual_monthly}
+                            type="text"
+                            inputMode="decimal"
+                            value={formatIdInput(entry.actual_monthly)}
                             style={{ width: '100%', minWidth: 0, fontVariantNumeric: 'tabular-nums' }}
                             onChange={e => {
+                              const raw = e.target.value;
+                              if (raw !== '' && !/^[\d.,\s]*$/.test(raw)) return;
+                              const num = parseNum(raw);
                               const n = [...scorecard];
-                              n[i] = { ...entry, actual_monthly: parseFloat(e.target.value || '0'), pct: calcPct(parseFloat(e.target.value || '0'), entry.target_monthly), score: Math.min(calcPct(parseFloat(e.target.value || '0'), entry.target_monthly), 100) };
+                              const pct = calcPct(num, entry.target_monthly);
+                              n[i] = { ...entry, actual_monthly: num, pct, score: Math.min(pct, 100) };
                               setScorecard(n);
                             }}
                           />
