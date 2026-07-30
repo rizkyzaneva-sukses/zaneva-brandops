@@ -150,41 +150,54 @@ export default function MonthlyReportPage() {
                 <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Overall Score</div>
               </div>
             </div>
-            <table className="table">
-              <thead>
-                <tr><th>KPI</th><th>Target Bulanan</th><th>Aktual Bulanan</th><th>Pencapaian</th><th>Score</th></tr>
-              </thead>
-              <tbody>
-                {scorecard.map((entry, i) => (
-                  <tr key={entry.kpi_name}>
-                    <td style={{ fontWeight: 500 }}>{entry.kpi_name}</td>
-                    <td>{formatNum(entry.target_monthly, entry.unit)}</td>
-                    <td>
-                      <input
-                        className="input"
-                        type="number"
-                        value={entry.actual_monthly}
-                        style={{ maxWidth: 120 }}
-                        onChange={e => {
-                          const n = [...scorecard];
-                          n[i] = { ...entry, actual_monthly: parseFloat(e.target.value || '0'), pct: calcPct(parseFloat(e.target.value || '0'), entry.target_monthly), score: Math.min(calcPct(parseFloat(e.target.value || '0'), entry.target_monthly), 100) };
-                          setScorecard(n);
-                        }}
-                      />
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{ width: 60, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${Math.min(entry.pct, 100)}%`, background: entry.pct >= 100 ? '#10B981' : entry.pct >= 70 ? '#22C55E' : entry.pct >= 50 ? '#F59E0B' : '#EF4444', borderRadius: 3 }} />
-                        </div>
-                        <span className={`badge ${getKpiStatusClass(entry.pct)}`} style={{ fontSize: 9 }}>{entry.pct}%</span>
-                      </div>
-                    </td>
-                    <td style={{ fontWeight: 700, color: entry.score >= 100 ? '#10B981' : entry.score >= 70 ? '#22C55E' : '#EF4444' }}>{entry.score}</td>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="table" style={{ tableLayout: 'fixed', width: '100%' }}>
+                <thead>
+                  <tr>
+                    <th style={{ width: '22%' }}>KPI</th>
+                    <th style={{ width: '20%' }}>Target Bulanan</th>
+                    <th style={{ width: '24%' }}>Aktual Bulanan</th>
+                    <th style={{ width: '22%' }}>Pencapaian</th>
+                    <th style={{ width: '12%' }}>Score</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {scorecard.map((entry, i) => (
+                    <tr key={entry.kpi_name}>
+                      <td style={{ fontWeight: 500, wordBreak: 'break-word' }}>{entry.kpi_name}</td>
+                      <td style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{formatNum(entry.target_monthly, entry.unit)}</td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                          {entry.unit === 'currency' && (
+                            <span style={{ fontSize: 13, color: 'var(--text-muted)', flexShrink: 0 }}>Rp</span>
+                          )}
+                          <input
+                            className="input"
+                            type="number"
+                            value={entry.actual_monthly}
+                            style={{ width: '100%', minWidth: 0, fontVariantNumeric: 'tabular-nums' }}
+                            onChange={e => {
+                              const n = [...scorecard];
+                              n[i] = { ...entry, actual_monthly: parseFloat(e.target.value || '0'), pct: calcPct(parseFloat(e.target.value || '0'), entry.target_monthly), score: Math.min(calcPct(parseFloat(e.target.value || '0'), entry.target_monthly), 100) };
+                              setScorecard(n);
+                            }}
+                          />
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ width: 48, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden', flexShrink: 0 }}>
+                            <div style={{ height: '100%', width: `${Math.min(entry.pct, 100)}%`, background: entry.pct >= 100 ? '#10B981' : entry.pct >= 70 ? '#22C55E' : entry.pct >= 50 ? '#F59E0B' : '#EF4444', borderRadius: 3 }} />
+                          </div>
+                          <span className={`badge ${getKpiStatusClass(entry.pct)}`} style={{ fontSize: 9 }}>{entry.pct}%</span>
+                        </div>
+                      </td>
+                      <td style={{ fontWeight: 700, color: entry.score >= 100 ? '#10B981' : entry.score >= 70 ? '#22C55E' : '#EF4444' }}>{entry.score}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 

@@ -227,28 +227,31 @@ export default function WeeklyReportPage() {
           <div className="card" style={{ marginBottom: 20 }}>
             <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: 16 }}>Step 2: Tabel KPI</h3>
             <div style={{ overflowX: 'auto' }}>
-              <table className="table">
+              <table className="table" style={{ tableLayout: 'fixed', width: '100%' }}>
                 <thead>
                   <tr>
-                    <th>KPI</th>
-                    <th>Target</th>
-                    <th>Aktual</th>
-                    <th>Pencapaian</th>
-                    <th>Catatan</th>
+                    <th style={{ width: '20%' }}>KPI</th>
+                    <th style={{ width: '18%' }}>Target</th>
+                    <th style={{ width: '22%' }}>Aktual</th>
+                    <th style={{ width: '14%' }}>Pencapaian</th>
+                    <th style={{ width: '26%' }}>Catatan</th>
                   </tr>
                 </thead>
                 <tbody>
                   {kpiData.map((kpi, i) => (
                     <tr key={kpi.kpi_item_id}>
-                      <td>{kpi.kpi_name}<br /><span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{kpi.unit}</span></td>
-                      <td>{kpi.target ? formatNum(parseFloat(kpi.target), kpi.unit) : '—'}</td>
+                      <td style={{ wordBreak: 'break-word' }}>{kpi.kpi_name}<br /><span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{kpi.unit}</span></td>
+                      <td style={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{kpi.target ? formatNum(parseFloat(kpi.target), kpi.unit) : '—'}</td>
                       <td>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                          {kpi.unit === 'currency' && (
+                            <span style={{ fontSize: 13, color: 'var(--text-muted)', flexShrink: 0 }}>Rp</span>
+                          )}
                           <input
                             className="input"
                             type="number"
                             value={kpi.actual}
-                            style={{ maxWidth: 120 }}
+                            style={{ width: '100%', minWidth: 0, fontVariantNumeric: 'tabular-nums' }}
                             readOnly={kpi.category === 'auto_sum'}
                             onChange={e => {
                               if (kpi.category === 'auto_sum') return;
@@ -266,7 +269,7 @@ export default function WeeklyReportPage() {
                               setKpiData(newKpis);
                             }}
                           />
-                          {kpi.is_auto && !kpi.is_overridden && <span style={{ fontSize: 10, color: 'var(--blue)' }}>🔄Auto</span>}
+                          {kpi.is_auto && !kpi.is_overridden && <span style={{ fontSize: 10, color: 'var(--blue)', flexShrink: 0 }}>🔄Auto</span>}
                         </div>
                       </td>
                       <td>
@@ -276,6 +279,7 @@ export default function WeeklyReportPage() {
                       </td>
                       <td>
                         <input className="input" type="text" placeholder="Catatan..." value={kpi.notes}
+                          style={{ width: '100%' }}
                           onChange={e => { const n = [...kpiData]; n[i] = { ...kpi, notes: e.target.value }; setKpiData(n); }}
                         />
                       </td>
