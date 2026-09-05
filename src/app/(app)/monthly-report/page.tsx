@@ -246,7 +246,7 @@ export default function MonthlyReportPage() {
           <button className="btn btn-secondary" onClick={loadMonthData}>🔄 Auto-aggregate dari Weekly Reports</button>
           {weeksIncluded > 0 && (
             <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
-              📦 {weeksIncluded} dari 4 weekly report submitted dihitung · sum untuk omzet/spend, avg untuk ROAS/rating
+              📦 {weeksIncluded} dari 4 weekly report submitted/reviewed dihitung · sum untuk omzet/spend, avg untuk ROAS/rating
             </div>
           )}
         </div>

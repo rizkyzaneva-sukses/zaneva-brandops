@@ -92,7 +92,10 @@ export default function WeeklyReportPage() {
   function refreshReports() {
     const brandFilter = user?.brand_id || '';
     const qs = brandFilter && user && !['owner', 'admin'].includes(user.role) ? `?brand_id=${brandFilter}` : '';
-    fetch(`/api/weekly-reports${qs}`).then((r) => r.json()).then(applyReports);
+    fetch(`/api/weekly-reports${qs}`)
+      .then((r) => r.json())
+      .then(applyReports)
+      .catch(() => {});
   }
 
   function hydrateForm(report: WeeklyReport) {
@@ -140,17 +143,18 @@ export default function WeeklyReportPage() {
   }, [user, brands, selectedBrand]);
 
   useEffect(() => {
-    if (view === 'form' && selectedBrand && selectedWeek) {
-      loadPrevActions(selectedBrand, selectedWeek);
-      const existing = reports.find((r) => r.brand_id === selectedBrand && r.week_label === selectedWeek);
-      if (existing) {
-        if (editingReport?.id !== existing.id) hydrateForm(existing);
-      } else if (editingReport) {
-        setKpiData([]);
-        setNarasi({ highlights: '', lowlights: '', root_cause: '', action_plan: '', eskalasi: '' });
-        setActionItems([]);
-        setEditingReport(null);
-      }
+    if (view !== 'form' || !selectedBrand || !selectedWeek) return;
+    loadPrevActions(selectedBrand, selectedWeek);
+    const existing = reports.find((r) => r.brand_id === selectedBrand && r.week_label === selectedWeek);
+    if (existing) {
+      if (editingReport?.id !== existing.id) hydrateForm(existing);
+      return;
+    }
+    if (editingReport && (editingReport.brand_id !== selectedBrand || editingReport.week_label !== selectedWeek)) {
+      setKpiData([]);
+      setNarasi({ highlights: '', lowlights: '', root_cause: '', action_plan: '', eskalasi: '' });
+      setActionItems([]);
+      setEditingReport(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedBrand, selectedWeek, view, reports]);
@@ -258,7 +262,7 @@ export default function WeeklyReportPage() {
       };
     }
 
-    const existingKpis = (editingReport?.brand_id === selectedBrand && editingReport?.week_label === selectedWeek
+    const existingKpis: KpiEntry[] = (editingReport?.brand_id === selectedBrand && editingReport?.week_label === selectedWeek
       ? editingReport.kpis
       : reports.find((r) => r.brand_id === selectedBrand && r.week_label === selectedWeek)?.kpis) || [];
     const existingById = new Map(existingKpis.map((k) => [k.kpi_item_id, k]));
@@ -402,7 +406,18 @@ export default function WeeklyReportPage() {
       const saved = await res.json().catch(() => ({}));
       if (res.ok) {
         showToast(status === 'submitted' ? '✅ Weekly Report disubmit! Angka Monitor jadi Frozen.' : '💾 Draft tersimpan');
-        if (saved?.id) setEditingReport(saved);
+        if (saved?.id) {
+          setEditingReport(saved);
+          setReports((prev) => {
+            const idx = prev.findIndex((r) => r.id === saved.id || (r.brand_id === saved.brand_id && r.week_label === saved.week_label));
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = saved;
+              return next;
+            }
+            return [saved, ...prev];
+          });
+        }
         refreshReports();
         if (status === 'submitted') setView('list');
       } else {
@@ -451,6 +466,7 @@ export default function WeeklyReportPage() {
             <div>
               <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6, fontWeight: 600 }}>Brand</label>
               <select className="input" value={selectedBrand} onChange={e => setSelectedBrand(e.target.value)}>
+                {!selectedBrand && <option value="">Pilih brand</option>}
                 {brandOptions.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </div>
@@ -462,6 +478,13 @@ export default function WeeklyReportPage() {
             </div>
           </div>
           <button className="btn btn-secondary" onClick={loadWeekData}>🔄 Load Data Otomatis</button>
+          {editingReport && (
+            <div style={{ marginTop: 12, fontSize: 12, color: editingReport.status === 'draft' ? 'var(--text-muted)' : '#F59E0B' }}>
+              {editingReport.status === 'draft'
+                ? 'Draft minggu ini sudah ada — lanjutkan dari data tersimpan.'
+                : `Laporan minggu ini sudah ${editingReport.status}. Simpan Draft tidak akan menimpa. Gunakan Submit untuk update.`}
+            </div>
+          )}
         </div>
 
         {/* Step 2: KPI Table */}
@@ -638,8 +661,16 @@ export default function WeeklyReportPage() {
 
         {/* Actions */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-          <button className="btn btn-secondary" onClick={() => handleSave('draft')} disabled={saving}>💾 Simpan Draft</button>
-          <button className="btn btn-primary" onClick={() => handleSave('submitted')} disabled={saving}>✅ Submit Weekly Report</button>
+          <button
+            className="btn btn-secondary"
+            onClick={() => handleSave('draft')}
+            disabled={saving || ['submitted', 'reviewed'].includes(editingReport?.status || '')}
+          >
+            💾 Simpan Draft
+          </button>
+          <button className="btn btn-primary" onClick={() => handleSave('submitted')} disabled={saving}>
+            {editingReport && ['submitted', 'reviewed'].includes(editingReport.status || '') ? '✅ Update Weekly Report' : '✅ Submit Weekly Report'}
+          </button>
         </div>
 
         {toast && <div className="toast toast-success">{toast}</div>}
@@ -677,7 +708,7 @@ export default function WeeklyReportPage() {
                     {user && ['owner', 'admin'].includes(user.role) && r.status === 'reviewed' && (
                       <button className="btn btn-ghost btn-sm" onClick={() => handleReview(r.id, 'submitted')}>Unreview</button>
                     )}
-                    {user && ['owner', 'admin', 'brand_manager'].includes(user.role) && (
+                    {user && (['owner', 'admin'].includes(user.role) || r.status === 'draft') && (
                       <button
                         className="btn btn-ghost btn-sm"
                         style={{ color: '#EF4444' }}
@@ -694,6 +725,7 @@ export default function WeeklyReportPage() {
           </tbody>
         </table>
       </div>
+      {toast && <div className="toast toast-success">{toast}</div>}
     </div>
   );
 }
