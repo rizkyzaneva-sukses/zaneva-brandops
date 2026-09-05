@@ -6,6 +6,8 @@ import { prisma } from '@/lib/prisma';
 import { sessionOptions, SessionData } from '@/lib/session';
 import { calcEffectivePct, normalizeActionItems, parseNum } from '@/lib/utils';
 
+const FINAL_STATUSES = ['submitted', 'reviewed'] as const;
+
 export async function GET(req: NextRequest) {
   const session = await getIronSession<SessionData>(await cookies(), sessionOptions);
   if (!session.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -50,6 +52,12 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'Hanya laporan brand sendiri yang bisa dihapus' }, { status: 403 });
   }
 
+  if (session.user.role === 'brand_manager' && report.status !== 'draft') {
+    return NextResponse.json({
+      error: 'Laporan yang sudah disubmit/di-review tidak bisa dihapus. Hubungi owner/admin.',
+    }, { status: 403 });
+  }
+
   await prisma.weeklyReport.delete({ where: { id } });
   return NextResponse.json({ success: true });
 }
@@ -70,10 +78,35 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Hanya brand sendiri yang bisa disimpan' }, { status: 403 });
   }
 
-  const status = data.status || 'draft';
-  const kpis = Array.isArray(data.kpis) ? data.kpis : [];
+  const status = data.status === 'submitted' ? 'submitted' : 'draft';
+  let kpis = Array.isArray(data.kpis) ? data.kpis : [];
   const actionItems = normalizeActionItems(data.action_items);
   const actionItemsJson = actionItems as unknown as Prisma.InputJsonValue;
+
+  const existing = await prisma.weeklyReport.findUnique({
+    where: { brand_id_week_label: { brand_id: data.brand_id, week_label: data.week_label } },
+  });
+
+  if (existing?.status === 'reviewed' && session.user.role === 'brand_manager') {
+    return NextResponse.json({
+      error: 'Laporan minggu ini sudah di-review. Hubungi owner/admin untuk mengubah.',
+    }, { status: 403 });
+  }
+
+  if (existing && FINAL_STATUSES.includes(existing.status as typeof FINAL_STATUSES[number]) && status === 'draft') {
+    return NextResponse.json({
+      error: 'Laporan minggu ini sudah disubmit. Gunakan Submit untuk update, bukan Simpan Draft, agar datanya tidak ter-reset.',
+    }, { status: 400 });
+  }
+
+  const existingKpis = Array.isArray(existing?.kpis) ? existing.kpis : [];
+  if (kpis.length === 0 && existingKpis.length > 0) {
+    kpis = existingKpis;
+  }
+
+  if (!existing && (!data.week_start || !data.week_end)) {
+    return NextResponse.json({ error: 'week_start dan week_end wajib' }, { status: 400 });
+  }
 
   if (status === 'submitted') {
     if (kpis.length === 0) {
@@ -108,29 +141,32 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const nextStatus = existing?.status === 'reviewed' && status === 'submitted' ? 'reviewed' : status;
+
   const report = await prisma.weeklyReport.upsert({
     where: { brand_id_week_label: { brand_id: data.brand_id, week_label: data.week_label } },
     update: {
       kpis,
-      highlights: data.highlights,
-      lowlights: data.lowlights,
-      root_cause: data.root_cause,
-      action_plan: data.action_plan,
-      eskalasi: data.eskalasi,
+      highlights: data.highlights ?? existing?.highlights,
+      lowlights: data.lowlights ?? existing?.lowlights,
+      root_cause: data.root_cause ?? existing?.root_cause,
+      action_plan: data.action_plan ?? existing?.action_plan,
+      eskalasi: data.eskalasi ?? existing?.eskalasi,
       action_items: actionItemsJson,
-      status,
+      status: nextStatus,
       submitted_by: session.user.full_name,
       submitted_by_role: session.user.role,
-      ...(status === 'submitted' || status === 'draft' ? { reviewed_by: null, reviewed_at: null } : {}),
+      ...(data.brand_name ? { brand_name: data.brand_name } : {}),
+      ...(nextStatus === 'draft' ? { reviewed_by: null, reviewed_at: null } : {}),
       ...(data.week_start ? { week_start: new Date(data.week_start + 'T00:00:00.000Z') } : {}),
       ...(data.week_end ? { week_end: new Date(data.week_end + 'T23:59:59.999Z') } : {}),
     },
     create: {
       brand_id: data.brand_id,
-      brand_name: data.brand_name,
+      brand_name: data.brand_name || existing?.brand_name || '',
       week_label: data.week_label,
-      week_start: new Date((data.week_start || '1970-01-01') + 'T00:00:00.000Z'),
-      week_end: new Date((data.week_end || '1970-01-01') + 'T23:59:59.999Z'),
+      week_start: new Date(data.week_start + 'T00:00:00.000Z'),
+      week_end: new Date(data.week_end + 'T23:59:59.999Z'),
       submitted_by: session.user.full_name,
       submitted_by_role: session.user.role,
       kpis,

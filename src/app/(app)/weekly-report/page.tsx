@@ -41,6 +41,7 @@ interface WeeklyReport {
   brand_name: string;
   week_label: string;
   week_start: string;
+  week_end?: string;
   status: string;
   kpis: KpiEntry[];
   highlights: string;
@@ -70,29 +71,89 @@ export default function WeeklyReportPage() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const weekOptions = getWeekOptions(6);
+  const baseWeekOptions = getWeekOptions(6);
+  const extraWeeks = reports
+    .filter((r) => !baseWeekOptions.some((w) => w.week_label === r.week_label))
+    .reduce<{ week_label: string; week_start: string; week_end: string }[]>((acc, r) => {
+      if (acc.some((w) => w.week_label === r.week_label)) return acc;
+      acc.push({
+        week_label: r.week_label,
+        week_start: r.week_start ? String(r.week_start).substring(0, 10) : '',
+        week_end: r.week_end ? String(r.week_end).substring(0, 10) : '',
+      });
+      return acc;
+    }, []);
+  const weekOptions = extraWeeks.length ? [...baseWeekOptions, ...extraWeeks] : baseWeekOptions;
+
+  function applyReports(data: unknown) {
+    if (Array.isArray(data)) setReports(data);
+  }
+
+  function refreshReports() {
+    const brandFilter = user?.brand_id || '';
+    const qs = brandFilter && user && !['owner', 'admin'].includes(user.role) ? `?brand_id=${brandFilter}` : '';
+    fetch(`/api/weekly-reports${qs}`).then((r) => r.json()).then(applyReports);
+  }
+
+  function hydrateForm(report: WeeklyReport) {
+    setSelectedBrand(report.brand_id);
+    setSelectedWeek(report.week_label);
+    setKpiData(report.kpis || []);
+    setNarasi({
+      highlights: report.highlights || '',
+      lowlights: report.lowlights || '',
+      root_cause: report.root_cause || '',
+      action_plan: report.action_plan || '',
+      eskalasi: report.eskalasi || '',
+    });
+    setActionItems(normalizeActionItems(report.action_items));
+    setEditingReport(report);
+  }
+
+  function showToast(message: string, ms = 3000) {
+    setToast(message);
+    setTimeout(() => setToast(''), ms);
+  }
 
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.json()).then(d => {
       setUser(d.user);
       if (d.user?.brand_id) setSelectedBrand(d.user.brand_id);
     });
-    fetch('/api/brands?status=active').then(r => r.json()).then(setBrands);
+    fetch('/api/brands?status=active').then(r => r.json()).then((list) => {
+      if (Array.isArray(list)) setBrands(list);
+    });
   }, []);
 
   useEffect(() => {
-    const brandFilter = user?.brand_id || '';
-    if (!brandFilter && user && !['owner', 'admin'].includes(user.role)) return;
-    fetch(`/api/weekly-reports${brandFilter && user && !['owner', 'admin'].includes(user.role) ? `?brand_id=${brandFilter}` : ''}`)
-      .then(r => r.json()).then(setReports);
+    if (!user) return;
+    const brandFilter = user.brand_id || '';
+    if (!brandFilter && !['owner', 'admin'].includes(user.role)) return;
+    refreshReports();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  useEffect(() => {
+    if (user && ['owner', 'admin'].includes(user.role) && !selectedBrand && brands.length > 0) {
+      setSelectedBrand(brands[0].id);
+    }
+  }, [user, brands, selectedBrand]);
 
   useEffect(() => {
     if (view === 'form' && selectedBrand && selectedWeek) {
       loadPrevActions(selectedBrand, selectedWeek);
+      const existing = reports.find((r) => r.brand_id === selectedBrand && r.week_label === selectedWeek);
+      if (existing) {
+        if (editingReport?.id !== existing.id) hydrateForm(existing);
+      } else if (editingReport) {
+        setKpiData([]);
+        setNarasi({ highlights: '', lowlights: '', root_cause: '', action_plan: '', eskalasi: '' });
+        setActionItems([]);
+        setEditingReport(null);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedBrand, selectedWeek, view]);
+  }, [selectedBrand, selectedWeek, view, reports]);
 
   async function loadWeekData() {
     if (!selectedBrand || !selectedWeek) return;
@@ -197,6 +258,27 @@ export default function WeeklyReportPage() {
       };
     }
 
+    const existingKpis = (editingReport?.brand_id === selectedBrand && editingReport?.week_label === selectedWeek
+      ? editingReport.kpis
+      : reports.find((r) => r.brand_id === selectedBrand && r.week_label === selectedWeek)?.kpis) || [];
+    const existingById = new Map(existingKpis.map((k) => [k.kpi_item_id, k]));
+    if (existingById.size > 0) {
+      for (let i = 0; i < entries.length; i++) {
+        const prev = existingById.get(entries[i].kpi_item_id);
+        if (!prev) continue;
+        entries[i] = {
+          ...entries[i],
+          notes: prev.notes || '',
+          ...(prev.is_overridden ? {
+            actual: prev.actual,
+            pct: calcPct(parseNum(prev.actual), parseNum(entries[i].target)),
+            score: calcEffectivePct(parseNum(prev.actual), parseNum(entries[i].target), entries[i].higher_is_better !== false),
+            is_overridden: true,
+          } : {}),
+        };
+      }
+    }
+
     setKpiData(entries);
     await loadPrevActions(selectedBrand, selectedWeek);
   }
@@ -222,97 +304,114 @@ export default function WeeklyReportPage() {
 
   function openCreate() {
     const defaultWeek = weekOptions[0];
-    setSelectedWeek(defaultWeek.week_label);
-    setKpiData([]);
-    setNarasi({ highlights: '', lowlights: '', root_cause: '', action_plan: '', eskalasi: '' });
-    setActionItems([]);
+    const brandId = selectedBrand || user?.brand_id || brands[0]?.id || '';
+    if (brandId) setSelectedBrand(brandId);
+    setSelectedWeek(defaultWeek?.week_label || '');
+    const existing = reports.find((r) => r.brand_id === brandId && r.week_label === defaultWeek?.week_label);
+    if (existing) {
+      hydrateForm(existing);
+    } else {
+      setKpiData([]);
+      setNarasi({ highlights: '', lowlights: '', root_cause: '', action_plan: '', eskalasi: '' });
+      setActionItems([]);
+      setEditingReport(null);
+    }
     setPrevActions([]);
     setPrevWeekLabel('');
-    setEditingReport(null);
     setView('form');
-    if (selectedBrand && defaultWeek) loadPrevActions(selectedBrand, defaultWeek.week_label);
+    if (brandId && defaultWeek) loadPrevActions(brandId, defaultWeek.week_label);
   }
 
   function openEdit(report: WeeklyReport) {
-    setSelectedBrand(report.brand_id);
-    setSelectedWeek(report.week_label);
-    setKpiData(report.kpis || []);
-    setNarasi({ highlights: report.highlights || '', lowlights: report.lowlights || '', root_cause: report.root_cause || '', action_plan: report.action_plan || '', eskalasi: report.eskalasi || '' });
-    setActionItems(normalizeActionItems(report.action_items));
-    setEditingReport(report);
+    hydrateForm(report);
     setView('form');
     loadPrevActions(report.brand_id, report.week_label);
   }
 
   async function handleDelete(id: string) {
     if (!confirm('Yakin hapus Weekly Report ini? Aksi tidak bisa dibatalkan.')) return;
+    setDeletingId(id);
     const res = await fetch(`/api/weekly-reports?id=${id}`, { method: 'DELETE' });
     if (res.ok) {
-      setToast('✅ Weekly Report berhasil dihapus');
-      setTimeout(() => setToast(''), 3000);
-      fetch('/api/weekly-reports').then(r => r.json()).then(setReports);
+      showToast('✅ Weekly Report berhasil dihapus');
+      refreshReports();
     } else {
-      const d = await res.json();
-      setToast(`❌ ${d.error || 'Gagal menghapus'}`);
-      setTimeout(() => setToast(''), 3000);
+      const d = await res.json().catch(() => ({}));
+      showToast(`❌ ${d.error || 'Gagal menghapus'}`, 4000);
     }
     setDeletingId(null);
   }
 
   async function handleSave(status: 'draft' | 'submitted') {
-    if (!selectedBrand || !selectedWeek) return;
+    if (!selectedBrand || !selectedWeek) {
+      showToast('❌ Pilih brand dan minggu dulu', 4000);
+      return;
+    }
+    const weekData = weekOptions.find(w => w.week_label === selectedWeek);
+    if (!weekData?.week_start || !weekData?.week_end) {
+      showToast('❌ Periode minggu tidak valid. Pilih ulang minggunya.', 4000);
+      return;
+    }
+    const existing = reports.find((r) => r.brand_id === selectedBrand && r.week_label === selectedWeek);
+    if (existing && ['submitted', 'reviewed'].includes(existing.status) && status === 'draft') {
+      showToast('❌ Laporan ini sudah disubmit. Gunakan Submit untuk update, bukan Simpan Draft.', 5000);
+      return;
+    }
+    if (existing?.status === 'reviewed' && user?.role === 'brand_manager') {
+      showToast('❌ Laporan sudah di-review. Hubungi owner/admin untuk mengubah.', 5000);
+      return;
+    }
     if (status === 'submitted' && kpiData.length === 0) {
-      setToast('❌ Load data KPI dulu sebelum submit');
-      setTimeout(() => setToast(''), 3000);
+      showToast('❌ Load data KPI dulu sebelum submit', 4000);
       return;
     }
     if (status === 'submitted') {
       const behind = kpiData.filter((k) => (k.score ?? k.pct) < 70 && parseNum(k.target) > 0);
       if (behind.length > 0) {
         if (!narasi.root_cause.trim()) {
-          setToast(`❌ ${behind.length} KPI di bawah 70% — isi Root Cause`);
-          setTimeout(() => setToast(''), 4000);
+          showToast(`❌ ${behind.length} KPI di bawah 70% — isi Root Cause`, 4000);
           return;
         }
         if (!actionItems.some((a) => a.title.trim() && a.owner.trim())) {
-          setToast('❌ Minimal 1 Action Item (judul + PIC) karena ada KPI behind');
-          setTimeout(() => setToast(''), 4000);
+          showToast('❌ Minimal 1 Action Item (judul + PIC) karena ada KPI behind', 4000);
           return;
         }
       }
     }
     setSaving(true);
-    const weekData = weekOptions.find(w => w.week_label === selectedWeek);
     const brand = brands.find(b => b.id === selectedBrand);
 
     const payload = {
       brand_id: selectedBrand,
-      brand_name: brand?.name || '',
+      brand_name: brand?.name || existing?.brand_name || '',
       week_label: selectedWeek,
-      week_start: weekData?.week_start,
-      week_end: weekData?.week_end,
+      week_start: weekData.week_start,
+      week_end: weekData.week_end,
       kpis: kpiData,
       action_items: actionItems,
       ...narasi,
       status,
     };
 
-    const res = await fetch('/api/weekly-reports', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    setSaving(false);
-    if (res.ok) {
-      setToast(status === 'submitted' ? '✅ Weekly Report disubmit! Angka Monitor jadi Frozen.' : '💾 Draft tersimpan');
-      setTimeout(() => setToast(''), 3000);
-      fetch('/api/weekly-reports').then(r => r.json()).then(setReports);
-      if (status === 'submitted') setView('list');
-    } else {
-      const d = await res.json().catch(() => ({}));
-      setToast(`❌ ${d.error || 'Gagal menyimpan'}`);
-      setTimeout(() => setToast(''), 4000);
+    try {
+      const res = await fetch('/api/weekly-reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const saved = await res.json().catch(() => ({}));
+      if (res.ok) {
+        showToast(status === 'submitted' ? '✅ Weekly Report disubmit! Angka Monitor jadi Frozen.' : '💾 Draft tersimpan');
+        if (saved?.id) setEditingReport(saved);
+        refreshReports();
+        if (status === 'submitted') setView('list');
+      } else {
+        showToast(`❌ ${saved.error || 'Gagal menyimpan'}`, 4000);
+      }
+    } catch {
+      showToast('❌ Gagal menyimpan. Cek koneksi lalu coba lagi.', 4000);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -323,13 +422,11 @@ export default function WeeklyReportPage() {
       body: JSON.stringify({ id, status: next }),
     });
     if (res.ok) {
-      setToast(next === 'reviewed' ? '✅ Ditandai reviewed' : '↩️ Status dikembalikan ke submitted');
-      setTimeout(() => setToast(''), 3000);
-      fetch('/api/weekly-reports').then(r => r.json()).then(setReports);
+      showToast(next === 'reviewed' ? '✅ Ditandai reviewed' : '↩️ Status dikembalikan ke submitted');
+      refreshReports();
     } else {
       const d = await res.json().catch(() => ({}));
-      setToast(`❌ ${d.error || 'Gagal review'}`);
-      setTimeout(() => setToast(''), 3000);
+      showToast(`❌ ${d.error || 'Gagal review'}`, 4000);
     }
   }
 

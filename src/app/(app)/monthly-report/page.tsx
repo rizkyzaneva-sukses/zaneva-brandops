@@ -71,9 +71,9 @@ export default function MonthlyReportPage() {
     const periods = getPeriodsForMonth(selectedMonth);
     const periodStarts = periods.map(p => p.week_start);
 
-    const monthReports = weeklyReports.filter((r: { week_start: string; status: string }) => {
+    const monthReports = (Array.isArray(weeklyReports) ? weeklyReports : []).filter((r: { week_start: string; status: string }) => {
       const weekStart = r.week_start ? r.week_start.substring(0, 10) : '';
-      return periodStarts.includes(weekStart) && r.status === 'submitted';
+      return periodStarts.includes(weekStart) && ['submitted', 'reviewed'].includes(r.status);
     });
 
     if (monthReports.length === 0) {

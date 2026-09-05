@@ -37,9 +37,9 @@ export async function POST(req: NextRequest) {
         weekLabel = getCurrentWeek(getWibDate()).week_label;
     }
 
-    // Get all submitted weekly reports for this period
+    // Get all submitted/reviewed weekly reports for this period
     const reports = await prisma.weeklyReport.findMany({
-        where: { week_label: weekLabel, status: 'submitted' },
+        where: { week_label: weekLabel, status: { in: ['submitted', 'reviewed'] } },
     });
 
     // Get brands

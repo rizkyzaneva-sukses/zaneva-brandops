@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
   // Weekly freeze only applies to full-week view (not Hari Ini)
   const weeklyReport = !day
     ? await prisma.weeklyReport.findFirst({
-        where: { brand_id, week_label, status: 'submitted' },
+        where: { brand_id, week_label, status: { in: ['submitted', 'reviewed'] } },
       })
     : null;
 
